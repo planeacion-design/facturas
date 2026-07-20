@@ -1301,10 +1301,14 @@ async function guardarCambios(mutador){
 }
 
 /* ===================== Migración desde Datos.json (una sola vez) ===================== */
+// Paso 1 de 2 de la migración: solo lee el archivo Datos.json (un único archivo en la raíz
+// de la carpeta) y vuelca su contenido a Google Sheets. A propósito NO recorre las carpetas
+// de proveedores buscando archivos nuevos — eso es un paso aparte (botón "🔄 Buscar archivos
+// nuevos"), que se hace después y por separado, para no mezclar ambas cosas en una sola acción.
 async function migrarDesdeJsonLocal(){
   if(!rootHandle){ toast('Primero conecta la carpeta que contiene el Datos.json a migrar.', true); return; }
   if(!accessToken){ toast('Primero conéctate con Google.', true); return; }
-  if(!window.confirm('Esto va a leer el Datos.json de la carpeta conectada y agregar sus facturas y catálogos a la hoja de Google Sheets conectada. Solo debe hacerse una vez (si se ejecuta dos veces, las facturas quedarían duplicadas). ¿Continuar?')) return;
+  if(!window.confirm('Esto va a leer el Datos.json de la carpeta conectada y agregar sus facturas y catálogos a la hoja de Google Sheets conectada (sin buscar archivos nuevos en las carpetas de proveedores; eso se hace después, por separado, con "Buscar archivos nuevos"). Solo debe hacerse una vez (si se ejecuta dos veces, las facturas quedarían duplicadas). ¿Continuar?')) return;
 
   let fh;
   try{ fh = await obtenerArchivoJson(); }catch(e){ fh = null; }
@@ -1332,11 +1336,20 @@ async function migrarDesdeJsonLocal(){
       centroCosto: Array.isArray(catalogosViejos.centroCosto) ? catalogosViejos.centroCosto : [...CENTRO_COSTO_OPTIONS]
     };
     await escribirCatalogos(catalogosFinal);
-    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_META+'!B1')}?valueInputOption=RAW`, { values: [[new Date().toISOString()]] });
+    const marcaTiempo = new Date().toISOString();
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_META+'!B1')}?valueInputOption=RAW`, { values: [[marcaTiempo]] });
 
-    toast(`Migración completa: ${filas.length} factura(s) agregadas a la hoja.`);
+    // Recarga solo lo que hay en Sheets (ya con lo recién migrado) — sin recorrer las
+    // carpetas de proveedores. Ese es el paso 2, aparte, con "Buscar archivos nuevos".
+    data = await leerFacturasDeSheets();
+    ultimoActualizadoRemoto = data.actualizado;
+    poblarCatalogos();
+    poblarFiltrosDinamicos();
+    aplicarFiltros();
+    renderSidebar();
+
+    toast(`Migración completa: ${filas.length} factura(s) agregadas a la hoja. Cuando quieras, usa "🔄 Buscar archivos nuevos" para revisar las carpetas de proveedores y agregar los archivos que falten.`);
     cerrarModal('modalConfig');
-    await cargarTodo();
   }catch(e){
     toast('Error durante la migración: ' + e.message, true);
   }
