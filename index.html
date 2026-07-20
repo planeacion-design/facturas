@@ -163,12 +163,10 @@
     <h1>Facturas</h1>
     <p>¿Quién eres? Selecciona tu nombre para continuar.</p>
     <div class="usuarios" id="listaUsuarios"></div>
-    <p>Conecta tu cuenta de Google (donde están los datos de las facturas) y luego selecciona la carpeta que contiene las carpetas de proveedores con los PDF.</p>
+    <p>Conecta tu cuenta de Google, donde están los datos de las facturas.</p>
     <button id="btnConectarGoogle">🔐 Conectar con Google</button>
     <div id="estadoGoogle" style="margin-top:8px;font-size:12px;opacity:.85;">No conectado todavía.</div>
-    <div style="height:14px;"></div>
-    <button id="btnSeleccionar" disabled>📁 Seleccionar carpeta de PDF</button>
-    <div class="aviso">Requiere Chrome o Edge de escritorio (API de acceso a archivos locales). No funciona en Firefox ni Safari.</div>
+    <div class="aviso" style="margin-top:18px;">La carpeta de PDF se conecta después, desde ⚙️ Configuración (no es necesaria para ver o editar la lista de facturas, solo para abrir los archivos).</div>
     <div class="error" id="landingError" style="display:none;"></div>
     <div style="margin-top:14px;font-size:11px;opacity:.6;" id="versionInfoLanding"></div>
   </div>
@@ -261,6 +259,12 @@
     <div class="modal-header"><h3>Configuración de catálogos</h3><button data-cerrar="modalConfig">✕</button></div>
     <div class="modal-body" style="padding:18px 20px 22px;">
       <p style="margin:0 0 16px;color:var(--gris-700);font-size:12.5px;">Agrega, renombra o elimina las opciones que aparecen en los selectores de Tipo de Gasto, Forma de Pago y Centro de Costos. Los cambios se guardan en la hoja de Google Sheets.</p>
+      <div style="margin:0 0 18px;padding:12px 14px;background:var(--azul-suave);border-radius:8px;">
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;">Carpeta de archivos PDF</div>
+        <div style="font-size:12px;color:var(--gris-700);margin-bottom:8px;" id="estadoCarpeta">No conectada todavía. Solo se necesita para poder abrir/previsualizar los archivos PDF; la lista de facturas ya funciona sin ella.</div>
+        <button class="btn-icon" id="btnSeleccionar" disabled>📁 Seleccionar carpeta de PDF</button>
+        <div style="font-size:11px;color:var(--gris-700);margin-top:6px;">Requiere Chrome o Edge de escritorio. No funciona en Firefox ni Safari.</div>
+      </div>
       <div style="margin:0 0 18px;padding:12px 14px;background:var(--azul-suave);border-radius:8px;">
         <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;">Migración desde Datos.json (una sola vez)</div>
         <div style="font-size:12px;color:var(--gris-700);margin-bottom:8px;">Si la carpeta que seleccionaste todavía tiene un Datos.json con facturas, puedes volcarlas a la hoja de Google Sheets conectada. Solo debe hacerse una vez; si ya migraste, no lo vuelvas a ejecutar.</div>
@@ -467,7 +471,7 @@ const USUARIOS = ["Gemma","Sebastian","Judith","Jaqueline","Lorena","Marcela","A
 // para poder verificar de un vistazo que TODOS los usuarios están usando la misma copia
 // (si alguien queda con una versión vieja, sus guardados no tendrán las protecciones
 // más recientes contra pérdida de datos entre varios usuarios).
-const VERSION_APP = "2.0 · 20 jul 2026 (datos en Google Sheets)";
+const VERSION_APP = "2.1 · 20 jul 2026 (carpeta de PDF opcional, se conecta desde Configuración)";
 (function mostrarVersion(){
   ['versionInfoLanding','versionInfoSidebar'].forEach(id=>{
     const el = document.getElementById(id);
@@ -606,6 +610,7 @@ function renderListaUsuarios(){
         try{ localStorage.setItem('facturas_usuarioActual', usuarioActual); }catch(e){}
         renderListaUsuarios();
         actualizarBotonSeleccionar();
+        intentarEntrarSiListo();
         const label = document.getElementById('usuarioActualLabel');
         if(label) label.textContent = usuarioActual;
         if(id === 'listaUsuariosModal'){
@@ -620,6 +625,7 @@ function renderListaUsuarios(){
   try{ usuarioActual = localStorage.getItem('facturas_usuarioActual') || null; }catch(e){ usuarioActual = null; }
   renderListaUsuarios();
   actualizarBotonSeleccionar();
+  intentarEntrarSiListo();
 })();
 document.getElementById('btnCambiarUsuario').addEventListener('click', ()=>{
   renderListaUsuarios();
@@ -714,65 +720,82 @@ async function idbLeerHandle(){
 }
 
 /* ===================== Selección de carpeta ===================== */
-document.getElementById('btnSeleccionar').addEventListener('click', async ()=>{
-  await conectarCarpeta();
-});
 document.getElementById('btnRescan').addEventListener('click', async ()=>{
   await escanearNuevos();
 });
 
 let entrando = false;
-// Se llama cada vez que se cumple una de las tres condiciones para arrancar (usuario elegido,
-// Google conectado, carpeta de PDF conectada). Solo entra a la app cuando las tres están listas.
+// Ya solo hacen falta usuario + Google conectados para entrar a ver/editar la lista de
+// facturas (viven en Sheets). La carpeta de PDF es aparte y se conecta desde Configuración,
+// solo hace falta para poder abrir/previsualizar los archivos.
 async function intentarEntrarSiListo(){
   if(entrando) return;
-  if(!(usuarioActual && accessToken && rootHandle)) return;
+  if(!(usuarioActual && accessToken)) return;
   entrando = true;
   await cargarTodo();
 }
 
+let handleRecordado = null; // handle de carpeta restaurado de IndexedDB, pendiente de que se le vuelva a dar permiso
+function actualizarEstadoCarpeta(){
+  const el = document.getElementById('estadoCarpeta');
+  if(!el) return;
+  if(rootHandle) el.textContent = '✅ Carpeta conectada: "' + rootHandle.name + '".';
+  else if(handleRecordado) el.textContent = 'Se recuerda una carpeta de una sesión anterior. Haz clic en el botón para volver a darle permiso.';
+  else el.textContent = 'No conectada todavía. Solo se necesita para poder abrir/previsualizar los archivos PDF; la lista de facturas ya funciona sin ella.';
+}
+
 async function conectarCarpeta(){
-  const errBox = document.getElementById('landingError');
-  errBox.style.display = 'none';
   if(!window.showDirectoryPicker){
-    errBox.style.display='block';
-    errBox.textContent = 'Tu navegador no soporta esta función. Usa Chrome o Edge de escritorio.';
+    toast('Tu navegador no soporta esta función. Usa Chrome o Edge de escritorio.', true);
     return;
   }
   try{
     const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
     rootHandle = handle;
+    handleRecordado = null;
     await idbGuardarHandle(handle);
-    await intentarEntrarSiListo();
-    if(!accessToken) toast('Carpeta conectada. Ahora conecta tu cuenta de Google para cargar los datos.');
+    actualizarEstadoCarpeta();
+    if(data) await escanearNuevos(true);
+    toast('Carpeta de PDF conectada.');
   }catch(e){
-    if(e.name !== 'AbortError'){
-      errBox.style.display='block';
-      errBox.textContent = 'No se pudo abrir la carpeta: ' + e.message;
-    }
+    if(e.name !== 'AbortError') toast('No se pudo abrir la carpeta: ' + e.message, true);
   }
 }
 
+document.getElementById('btnSeleccionar').addEventListener('click', async ()=>{
+  if(handleRecordado){
+    try{
+      const p = await handleRecordado.requestPermission({mode:'readwrite'});
+      if(p === 'granted'){
+        rootHandle = handleRecordado;
+        handleRecordado = null;
+        await idbGuardarHandle(rootHandle);
+        actualizarEstadoCarpeta();
+        if(data) await escanearNuevos(true);
+        toast('Carpeta de PDF reconectada.');
+        return;
+      }
+    }catch(e){ /* si falla, se ofrece el selector normal abajo */ }
+  }
+  await conectarCarpeta();
+});
+
+// Al cargar la página, intenta recuperar en silencio la carpeta de una sesión anterior
+// (sin bloquear la entrada a la app: eso ahora solo depende de usuario + Google).
 async function intentarReconectarAutomatico(){
   const handle = await idbLeerHandle();
   if(!handle) return false;
   try{
     let permiso = await handle.queryPermission({mode:'readwrite'});
     if(permiso !== 'granted'){
-      // No podemos pedir permiso sin gesto del usuario; mostramos landing con botón de reconexión rápida.
-      const btn = document.getElementById('btnSeleccionar');
-      btn.textContent = '📁 Reconectar carpeta';
-      btn.onclick = async ()=>{
-        try{
-          const p = await handle.requestPermission({mode:'readwrite'});
-          if(p === 'granted'){ rootHandle = handle; await intentarEntrarSiListo(); }
-          else { await conectarCarpeta(); }
-        }catch(e){ await conectarCarpeta(); }
-      };
+      // No se puede pedir permiso sin un gesto del usuario; se recuerda para cuando
+      // haga clic en el botón dentro de Configuración.
+      handleRecordado = handle;
+      actualizarEstadoCarpeta();
       return false;
     }
     rootHandle = handle;
-    await intentarEntrarSiListo();
+    actualizarEstadoCarpeta();
     return true;
   }catch(e){ return false; }
 }
@@ -1505,6 +1528,7 @@ async function eliminarCatalogoItem(clave, idx){
 
 document.getElementById('btnConfiguracion').addEventListener('click', ()=>{
   renderConfig();
+  actualizarEstadoCarpeta();
   abrirModal('modalConfig');
 });
 document.querySelectorAll('[data-agregar]').forEach(btn=>{
@@ -1813,6 +1837,10 @@ document.getElementById('c_revisado').addEventListener('change', async ()=>{
 
 async function cargarPreview(f){
   const pane = document.getElementById('previewPane');
+  if(!rootHandle){
+    pane.innerHTML = '<div class="sin-preview">Todavía no has conectado la carpeta de PDF.<br>Ve a ⚙️ Configuración para conectarla y poder ver el archivo.</div>';
+    return;
+  }
   pane.innerHTML = '<div class="sin-preview">Cargando vista previa...</div>';
   if(previewUrlActual){ URL.revokeObjectURL(previewUrlActual); previewUrlActual = null; }
   try{
@@ -1890,10 +1918,9 @@ function valorNumerico(id){
 
 /* ===================== Arranque ===================== */
 (async function inicio(){
-  const ok = await intentarReconectarAutomatico();
-  if(!ok){
-    // se queda en landing esperando click del usuario
-  }
+  // Intenta recuperar en silencio la carpeta de PDF de una sesión anterior. Ya no bloquea
+  // la entrada a la app: eso depende solo de elegir usuario y conectar Google.
+  await intentarReconectarAutomatico();
 })();
 
 })();
