@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Facturas</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --azul:#3b6ef6; --azul-vivo:#2f5cf0; --azul-osc:#111a33; --azul-suave:#eef3ff;
@@ -162,8 +163,11 @@
     <h1>Facturas</h1>
     <p>¿Quién eres? Selecciona tu nombre para continuar.</p>
     <div class="usuarios" id="listaUsuarios"></div>
-    <p>Selecciona la carpeta raíz que contiene las carpetas de proveedores y el archivo <strong>Datos.json</strong>.</p>
-    <button id="btnSeleccionar" disabled>📁 Seleccionar carpeta</button>
+    <p>Conecta tu cuenta de Google (donde están los datos de las facturas) y luego selecciona la carpeta que contiene las carpetas de proveedores con los PDF.</p>
+    <button id="btnConectarGoogle">🔐 Conectar con Google</button>
+    <div id="estadoGoogle" style="margin-top:8px;font-size:12px;opacity:.85;">No conectado todavía.</div>
+    <div style="height:14px;"></div>
+    <button id="btnSeleccionar" disabled>📁 Seleccionar carpeta de PDF</button>
     <div class="aviso">Requiere Chrome o Edge de escritorio (API de acceso a archivos locales). No funciona en Firefox ni Safari.</div>
     <div class="error" id="landingError" style="display:none;"></div>
     <div style="margin-top:14px;font-size:11px;opacity:.6;" id="versionInfoLanding"></div>
@@ -242,7 +246,7 @@
 <div class="modal-fondo" id="modalNuevos">
   <div class="modal" style="max-width:640px;">
     <div class="modal-header"><h3>Archivos nuevos encontrados</h3><button data-cerrar="modalNuevos">✕</button></div>
-    <p style="padding:0 20px;color:var(--gris-700);font-size:13px;">Se encontraron <strong id="cantidadNuevos">0</strong> archivo(s) que no están en Datos.json. Selecciona los que quieras incluir.</p>
+    <p style="padding:0 20px;color:var(--gris-700);font-size:13px;">Se encontraron <strong id="cantidadNuevos">0</strong> archivo(s) que no están en la hoja de facturas. Selecciona los que quieras incluir.</p>
     <div class="lista-nuevos" id="listaNuevos"></div>
     <div class="modal-footer">
       <button class="btn-icon" data-cerrar="modalNuevos">Ahora no</button>
@@ -256,7 +260,12 @@
   <div class="modal" style="max-width:760px;">
     <div class="modal-header"><h3>Configuración de catálogos</h3><button data-cerrar="modalConfig">✕</button></div>
     <div class="modal-body" style="padding:18px 20px 22px;">
-      <p style="margin:0 0 16px;color:var(--gris-700);font-size:12.5px;">Agrega, renombra o elimina las opciones que aparecen en los selectores de Tipo de Gasto, Forma de Pago y Centro de Costos. Los cambios se guardan en Datos.json.</p>
+      <p style="margin:0 0 16px;color:var(--gris-700);font-size:12.5px;">Agrega, renombra o elimina las opciones que aparecen en los selectores de Tipo de Gasto, Forma de Pago y Centro de Costos. Los cambios se guardan en la hoja de Google Sheets.</p>
+      <div style="margin:0 0 18px;padding:12px 14px;background:var(--azul-suave);border-radius:8px;">
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;">Migración desde Datos.json (una sola vez)</div>
+        <div style="font-size:12px;color:var(--gris-700);margin-bottom:8px;">Si la carpeta que seleccionaste todavía tiene un Datos.json con facturas, puedes volcarlas a la hoja de Google Sheets conectada. Solo debe hacerse una vez; si ya migraste, no lo vuelvas a ejecutar.</div>
+        <button class="btn-icon" id="btnMigrarJson">⬆️ Migrar Datos.json a Google Sheets</button>
+      </div>
       <div class="config-grid">
         <div class="config-seccion" data-catalogo="tipoGasto">
           <h4>Tipo de Gasto</h4>
@@ -458,7 +467,7 @@ const USUARIOS = ["Gemma","Sebastian","Judith","Jaqueline","Lorena","Marcela","A
 // para poder verificar de un vistazo que TODOS los usuarios están usando la misma copia
 // (si alguien queda con una versión vieja, sus guardados no tendrán las protecciones
 // más recientes contra pérdida de datos entre varios usuarios).
-const VERSION_APP = "1.6 · 20 jul 2026 (control de concurrencia + respaldos)";
+const VERSION_APP = "2.0 · 20 jul 2026 (datos en Google Sheets)";
 (function mostrarVersion(){
   ['versionInfoLanding','versionInfoSidebar'].forEach(id=>{
     const el = document.getElementById(id);
@@ -466,10 +475,42 @@ const VERSION_APP = "1.6 · 20 jul 2026 (control de concurrencia + respaldos)";
   });
 })();
 
+/* ===================== Configuración de Google Sheets ===================== */
+// SHEET_ID: reemplázalo por el ID de la hoja definitiva antes de usar en producción
+// (se ve en la URL de la hoja: https://docs.google.com/spreadsheets/d/ESTE_ES_EL_ID/edit).
+const SHEET_ID = '1NuVluLf44fHLYvj6Rm5mc4PsLBBtLbmElPM_Jxtm2Ag';
+const CLIENT_ID = '241666009303-mukiicoi2vg7sujgnpr428mkjraulrve.apps.googleusercontent.com';
+const SCOPE_SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+const PESTANA_FACTURAS = 'Facturas';
+const PESTANA_CATALOGOS = 'Catalogos';
+const PESTANA_META = 'Meta';
+
+// Encabezados de la pestaña "Facturas", en el orden exacto en que se escriben las columnas.
+const ENCABEZADOS_FACTURAS = [
+  'id','proveedor','archivo','relPath','tamano','modificado','revisado','estado','motivoError',
+  'modificadoPor','modificadoFecha','cif','numero','fecha','base','iva','ivaPorcentaje','total',
+  'retencionPorcentaje','retencionValor','retencionTiene','Descuento','Forma de Pago','Concepto',
+  'Coincide Valores','Centro de Costos','Anticipo','Tipo de Gasto','activoFijo','texto'
+];
+// Campos que van dentro de "campos" en el objeto factura (todo lo que no es de nivel raíz).
+const CAMPOS_ENCABEZADOS = ENCABEZADOS_FACTURAS.filter(h=>!['id','proveedor','archivo','relPath','tamano','modificado','revisado','estado','motivoError','modificadoPor','modificadoFecha','texto'].includes(h));
+
+// Convierte un índice de columna (0-based) a letra(s) de columna de Sheets (0->A, 25->Z, 26->AA...).
+function colLetra(idx){
+  let s = '';
+  idx = idx + 1;
+  while(idx > 0){
+    const resto = (idx - 1) % 26;
+    s = String.fromCharCode(65 + resto) + s;
+    idx = Math.floor((idx - 1) / 26);
+  }
+  return s;
+}
+
 /* ===================== Estado global ===================== */
 let rootHandle = null;
-let data = null;              // { facturas:[...], terceros:{...}, actualizado }
-let jsonFileName = "Datos.json";
+let jsonFileName = "Datos.json"; // solo se usa desde la migración (leer el Datos.json clásico)
+let data = null;              // { facturas:[...], actualizado, catalogos:{...} }
 let filtered = [];
 let sortCol = null, sortDir = 1;
 let currentPage = 1, pageSize = 50;
@@ -477,9 +518,81 @@ let filtros = { texto:"", mes:"", proveedor:"", centro:"", formaPago:"", estado:
 let previewUrlActual = null;
 let editandoIdx = null;
 let usuarioActual = null;
-let ultimoModificadoDisco = null;  // fecha de modificación del Datos.json que tenemos cargado
+let ultimoActualizadoRemoto = null;  // valor de Meta!actualizado que tenemos cargado (para detectar cambios de otros usuarios)
 let sincronizando = false;
 let intervaloSync = null;
+
+/* ===================== Autenticación con Google (Sheets) ===================== */
+let tokenClient = null;
+let accessToken = null;
+let tokenExpira = 0; // epoch ms
+
+function initGis(){
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE_SHEETS,
+    callback: (resp)=>{
+      const estado = document.getElementById('estadoGoogle');
+      if(resp.error){
+        if(estado) estado.textContent = 'Error al conectar: ' + resp.error;
+        return;
+      }
+      accessToken = resp.access_token;
+      tokenExpira = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+      if(estado) estado.textContent = '✅ Conectado con Google.';
+      document.getElementById('btnConectarGoogle').textContent = '🔐 Conectado con Google';
+      actualizarBotonSeleccionar();
+      intentarEntrarSiListo();
+    }
+  });
+}
+(function esperarGis(){
+  const t = setInterval(()=>{
+    if(window.google && google.accounts && google.accounts.oauth2){
+      clearInterval(t);
+      initGis();
+    }
+  }, 100);
+})();
+document.getElementById('btnConectarGoogle').addEventListener('click', ()=>{
+  if(!tokenClient){ toast('La librería de Google todavía no ha cargado. Intenta de nuevo en un segundo.', true); return; }
+  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+});
+// El botón de seleccionar carpeta solo se habilita cuando ya se eligió usuario Y se conectó Google.
+function actualizarBotonSeleccionar(){
+  const btn = document.getElementById('btnSeleccionar');
+  if(btn) btn.disabled = !(usuarioActual && accessToken);
+}
+// Se asegura de tener un token vigente antes de llamar a la API de Sheets; si expiró, lo
+// refresca en silencio (sin mostrar ventana, ya que el usuario ya dio su consentimiento antes).
+async function asegurarToken(){
+  if(accessToken && Date.now() < tokenExpira) return true;
+  if(!tokenClient) return false;
+  return await new Promise((resolve)=>{
+    const cbOriginal = tokenClient.callback;
+    tokenClient.callback = (resp)=>{
+      tokenClient.callback = cbOriginal;
+      if(resp.error){ resolve(false); return; }
+      accessToken = resp.access_token;
+      tokenExpira = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+      resolve(true);
+    };
+    tokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+// Llama a la API de Google Sheets (v4) para la hoja SHEET_ID. `ruta` empieza con '/' o es ''.
+async function llamarSheets(metodo, ruta, cuerpo){
+  const ok = await asegurarToken();
+  if(!ok) throw new Error('No se pudo obtener un permiso válido de Google. Conéctate de nuevo con el botón "Conectar con Google".');
+  const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}${ruta}`, {
+    method: metodo,
+    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined
+  });
+  const datos = await resp.json();
+  if(!resp.ok) throw new Error(datos.error ? datos.error.message : ('HTTP ' + resp.status));
+  return datos;
+}
 
 /* ===================== Selección de usuario ===================== */
 function renderListaUsuarios(){
@@ -492,8 +605,7 @@ function renderListaUsuarios(){
         usuarioActual = btn.dataset.usuario;
         try{ localStorage.setItem('facturas_usuarioActual', usuarioActual); }catch(e){}
         renderListaUsuarios();
-        const btnSel = document.getElementById('btnSeleccionar');
-        if(btnSel) btnSel.disabled = false;
+        actualizarBotonSeleccionar();
         const label = document.getElementById('usuarioActualLabel');
         if(label) label.textContent = usuarioActual;
         if(id === 'listaUsuariosModal'){
@@ -507,7 +619,7 @@ function renderListaUsuarios(){
 (function initUsuario(){
   try{ usuarioActual = localStorage.getItem('facturas_usuarioActual') || null; }catch(e){ usuarioActual = null; }
   renderListaUsuarios();
-  if(usuarioActual) document.getElementById('btnSeleccionar').disabled = false;
+  actualizarBotonSeleccionar();
 })();
 document.getElementById('btnCambiarUsuario').addEventListener('click', ()=>{
   renderListaUsuarios();
@@ -609,6 +721,16 @@ document.getElementById('btnRescan').addEventListener('click', async ()=>{
   await escanearNuevos();
 });
 
+let entrando = false;
+// Se llama cada vez que se cumple una de las tres condiciones para arrancar (usuario elegido,
+// Google conectado, carpeta de PDF conectada). Solo entra a la app cuando las tres están listas.
+async function intentarEntrarSiListo(){
+  if(entrando) return;
+  if(!(usuarioActual && accessToken && rootHandle)) return;
+  entrando = true;
+  await cargarTodo();
+}
+
 async function conectarCarpeta(){
   const errBox = document.getElementById('landingError');
   errBox.style.display = 'none';
@@ -621,7 +743,8 @@ async function conectarCarpeta(){
     const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
     rootHandle = handle;
     await idbGuardarHandle(handle);
-    await cargarTodo();
+    await intentarEntrarSiListo();
+    if(!accessToken) toast('Carpeta conectada. Ahora conecta tu cuenta de Google para cargar los datos.');
   }catch(e){
     if(e.name !== 'AbortError'){
       errBox.style.display='block';
@@ -642,19 +765,21 @@ async function intentarReconectarAutomatico(){
       btn.onclick = async ()=>{
         try{
           const p = await handle.requestPermission({mode:'readwrite'});
-          if(p === 'granted'){ rootHandle = handle; await cargarTodo(); }
+          if(p === 'granted'){ rootHandle = handle; await intentarEntrarSiListo(); }
           else { await conectarCarpeta(); }
         }catch(e){ await conectarCarpeta(); }
       };
       return false;
     }
     rootHandle = handle;
-    await cargarTodo();
+    await intentarEntrarSiListo();
     return true;
   }catch(e){ return false; }
 }
 
-/* ===================== Carga de datos ===================== */
+/* ===================== Carga de datos (Google Sheets) ===================== */
+// Solo se usa ya desde la herramienta de migración (Configuración): busca el Datos.json
+// clásico en la carpeta conectada, para poder volcar su contenido a la hoja de Sheets.
 async function obtenerArchivoJson(){
   for(const nombre of ['Datos.json','datos.json']){
     try{
@@ -666,32 +791,146 @@ async function obtenerArchivoJson(){
   return null;
 }
 
+// Si alguna de las tres pestañas (Facturas, Catalogos, Meta) todavía no tiene su fila de
+// encabezados (p.ej. porque es la primera vez que se usa esta hoja), se escribe ahora.
+// Requiere que las 3 pestañas ya existan con esos nombres exactos dentro del archivo de Sheets.
+async function asegurarEstructuraHoja(){
+  const resp = await llamarSheets('GET',
+    `/values:batchGet?ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:A1')}`);
+  const [rf, rc, rm] = resp.valueRanges;
+  if(!rf.values || !rf.values.length){
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_FACTURAS+'!A1')}?valueInputOption=RAW`, { values:[ENCABEZADOS_FACTURAS] });
+  }
+  if(!rc.values || !rc.values.length){
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_CATALOGOS+'!A1:B1')}?valueInputOption=RAW`, { values:[['catalogo','valor']] });
+  }
+  if(!rm.values || !rm.values.length){
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_META+'!A1:B1')}?valueInputOption=RAW`, { values:[['actualizado', new Date().toISOString()]] });
+  }
+}
+
+// Convierte una fila cruda de la pestaña "Facturas" (según los encabezados leídos) en el
+// mismo formato de objeto factura que usa el resto de la app (proveedor, campos, etc.).
+function filaDatosAFactura(encabezados, fila, numFila){
+  const obj = {};
+  encabezados.forEach((h, i)=>{ obj[h] = fila[i]; });
+  const numero = v => (v===undefined||v===null||v==='') ? null : Number(v);
+  const booleano = v => v===true || v==='TRUE' || v==='true' || v==='1' || v==='Sí';
+  return {
+    id: (obj.id!==undefined && obj.id!==null && obj.id!=='') ? Number(obj.id) : null,
+    proveedor: obj.proveedor || '',
+    archivo: obj.archivo || '',
+    relPath: obj.relPath || obj.archivo || '',
+    tamano: numero(obj.tamano),
+    modificado: numero(obj.modificado),
+    revisado: booleano(obj.revisado),
+    estado: obj.estado || 'pendiente',
+    motivoError: obj.motivoError || '',
+    modificadoPor: obj.modificadoPor || '',
+    modificadoFecha: obj.modificadoFecha || '',
+    texto: obj.texto || '',
+    campos: {
+      cif: obj.cif || null,
+      numero: obj.numero || null,
+      fecha: obj.fecha || null,
+      base: numero(obj.base),
+      iva: numero(obj.iva),
+      ivaPorcentaje: numero(obj.ivaPorcentaje),
+      total: numero(obj.total),
+      retencionPorcentaje: numero(obj.retencionPorcentaje),
+      retencionValor: numero(obj.retencionValor),
+      retencionTiene: booleano(obj.retencionTiene),
+      'Descuento': numero(obj.Descuento),
+      'Forma de Pago': obj['Forma de Pago'] || null,
+      'Concepto': obj['Concepto'] || null,
+      'Coincide Valores': booleano(obj['Coincide Valores']),
+      'Centro de Costos': obj['Centro de Costos'] || null,
+      'Anticipo': obj['Anticipo'] || 'No',
+      'Tipo de Gasto': obj['Tipo de Gasto'] || null,
+      activoFijo: obj.activoFijo || 'No'
+    },
+    _fila: numFila // número de fila real dentro de la pestaña (no se persiste, solo se usa para guardar)
+  };
+}
+
+// Hace el camino inverso: a partir de un objeto factura, arma la fila de valores en el
+// mismo orden que ENCABEZADOS_FACTURAS, lista para escribir en la hoja.
+function facturaAFila(f){
+  const c = f.campos || {};
+  const val = v => (v===null || v===undefined) ? '' : v;
+  const mapa = {
+    id: f.id!=null ? f.id : '', proveedor: val(f.proveedor), archivo: val(f.archivo), relPath: val(f.relPath),
+    tamano: val(f.tamano), modificado: val(f.modificado), revisado: !!f.revisado, estado: val(f.estado),
+    motivoError: val(f.motivoError), modificadoPor: val(f.modificadoPor), modificadoFecha: val(f.modificadoFecha),
+    cif: val(c.cif), numero: val(c.numero), fecha: val(c.fecha), base: val(c.base), iva: val(c.iva),
+    ivaPorcentaje: val(c.ivaPorcentaje), total: val(c.total), retencionPorcentaje: val(c.retencionPorcentaje),
+    retencionValor: val(c.retencionValor), retencionTiene: !!c.retencionTiene, 'Descuento': val(c['Descuento']),
+    'Forma de Pago': val(c['Forma de Pago']), 'Concepto': val(c['Concepto']), 'Coincide Valores': !!c['Coincide Valores'],
+    'Centro de Costos': val(c['Centro de Costos']), 'Anticipo': val(c['Anticipo']), 'Tipo de Gasto': val(c['Tipo de Gasto']),
+    activoFijo: val(c.activoFijo), texto: val(f.texto)
+  };
+  return ENCABEZADOS_FACTURAS.map(h=> mapa[h]);
+}
+
+// Lee TODO (facturas + catálogos + marca de tiempo) directamente de la hoja de Google Sheets.
+async function leerFacturasDeSheets(){
+  await asegurarEstructuraHoja();
+  const resp = await llamarSheets('GET',
+    `/values:batchGet?ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:AZ200000')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:B100000')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:B1')}`);
+  const [rangoFacturas, rangoCatalogos, rangoMeta] = resp.valueRanges;
+
+  const valoresF = rangoFacturas.values || [];
+  const encabezados = valoresF[0] || ENCABEZADOS_FACTURAS;
+  const facturas = valoresF.slice(1)
+    .map((fila, i)=> filaDatosAFactura(encabezados, fila, i+2))
+    .filter(f=> f.proveedor || f.archivo); // ignora filas totalmente vacías
+
+  const filasCatalogos = rangoCatalogos.values || [];
+  const catalogos = { tipoGasto:[], formaPago:[], centroCosto:[] };
+  filasCatalogos.slice(1).forEach(fila=>{
+    const [clave, valor] = fila;
+    if(clave && catalogos[clave] !== undefined && valor) catalogos[clave].push(valor);
+  });
+  // Si la pestaña de catálogos está totalmente vacía (primera vez que se usa la hoja), se
+  // rellenan los catálogos con los valores por defecto definidos en el código.
+  if(filasCatalogos.length <= 1){
+    catalogos.tipoGasto = [...TIPO_GASTO_OPTIONS];
+    catalogos.formaPago = [...FORMA_PAGO_OPTIONS];
+    catalogos.centroCosto = [...CENTRO_COSTO_OPTIONS];
+  }
+
+  const actualizado = (rangoMeta.values && rangoMeta.values[0] && rangoMeta.values[0][1]) || null;
+  return { facturas, catalogos, actualizado };
+}
+
+// Sobrescribe por completo la pestaña "Catalogos" con el contenido actual. Los catálogos son
+// pequeños y se editan poco, así que reescribirlos enteros (en vez de fila por fila) es simple
+// y de bajo riesgo de choque entre usuarios.
+async function escribirCatalogos(catalogos){
+  const filas = [];
+  Object.keys(catalogos).forEach(clave=>{
+    (catalogos[clave]||[]).forEach(v=> filas.push([clave, v]));
+  });
+  await llamarSheets('POST', `/values/${encodeURIComponent(PESTANA_CATALOGOS+'!A2:B100000')}:clear`, {});
+  if(filas.length > 0){
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_CATALOGOS+'!A2')}?valueInputOption=RAW`, { values: filas });
+  }
+}
+
 async function cargarTodo(){
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').classList.add('activo');
   try{
-    const fh = await obtenerArchivoJson();
-    if(!fh){
-      toast('No se encontró Datos.json en la carpeta seleccionada.', true);
-      data = { facturas: [], terceros: {}, actualizado: new Date().toISOString() };
-    } else {
-      const file = await fh.getFile();
-      const texto = await file.text();
-      data = JSON.parse(texto);
-      if(!Array.isArray(data.facturas)) data.facturas = [];
-      if(!data.terceros) data.terceros = {};
-      ultimoModificadoDisco = file.lastModified;
-    }
+    data = await leerFacturasDeSheets();
   }catch(e){
-    toast('Error leyendo Datos.json: ' + e.message, true);
-    data = { facturas: [], terceros: {}, actualizado: new Date().toISOString() };
+    toast('Error leyendo la hoja de Google Sheets: ' + e.message, true);
+    data = { facturas: [], catalogos: { tipoGasto:[...TIPO_GASTO_OPTIONS], formaPago:[...FORMA_PAGO_OPTIONS], centroCosto:[...CENTRO_COSTO_OPTIONS] }, actualizado: null };
   }
-  seedCatalogos();
+  ultimoActualizadoRemoto = data.actualizado;
 
   // Migración: si alguna factura no tiene todavía su número consecutivo (id), se asigna
-  // ahora, respetando el orden en que ya estaban en el archivo. Va dentro de
-  // guardarCambios() para que sea seguro aunque varios usuarios abran la app casi al
-  // mismo tiempo con el mismo archivo sin ids todavía.
+  // ahora, respetando el orden en que ya estaban en la hoja. Va dentro de guardarCambios()
+  // para que sea seguro aunque varios usuarios abran la app casi al mismo tiempo.
   if(data.facturas.some(f=> typeof f.id !== 'number')){
     await guardarCambios((fresh)=>{ asignarIdsFaltantes(fresh); });
   }
@@ -705,10 +944,10 @@ async function cargarTodo(){
 }
 
 /* ===================== Sincronización en tiempo real entre usuarios ===================== */
-// Como varias personas pueden tener el visor abierto sobre la misma carpeta compartida,
-// revisamos periódicamente si Datos.json cambió en disco (por otro usuario) y, si es así,
-// recargamos y refrescamos la vista automáticamente. No interrumpe si hay un modal abierto
-// (edición en curso, archivos nuevos o configuración) para no perder lo que se está escribiendo.
+// Como varias personas pueden tener el visor abierto sobre la misma hoja, revisamos
+// periódicamente una única celda (Meta!B1) que se actualiza en cada guardado; si cambió desde
+// la última vez que la vimos, recargamos todo. No interrumpe si hay un modal abierto (edición
+// en curso, archivos nuevos o configuración) para no perder lo que se está escribiendo.
 function hayModalAbierto(){
   return document.getElementById('modalEditar').classList.contains('activo')
       || document.getElementById('modalNuevos').classList.contains('activo')
@@ -716,59 +955,22 @@ function hayModalAbierto(){
       || document.getElementById('modalUsuario').classList.contains('activo');
 }
 
-// Devuelve: el objeto de datos si se leyó y parseó bien; null si el archivo no existe;
-// undefined si existe pero no se pudo interpretar como JSON válido (p.ej. porque se está
-// escribiendo justo en este instante desde otra app, como un sincronizador de nube).
-async function leerDatosDelDisco(){
-  const fh = await obtenerArchivoJson();
-  if(!fh) return null;
-  const file = await fh.getFile();
-  const texto = await file.text();
-  let fresh;
-  try{ fresh = texto.trim() ? JSON.parse(texto) : {}; }
-  catch(e){ return undefined; }
-  if(!Array.isArray(fresh.facturas)) fresh.facturas = [];
-  if(!fresh.terceros) fresh.terceros = {};
-  return fresh;
-}
-
-// Igual que leerDatosDelDisco, pero reintenta unas veces si el archivo aparece corrupto
-// momentáneamente (típico si se lee justo cuando un sincronizador de nube -OneDrive, Google
-// Drive, Dropbox- está terminando de escribir una versión nueva). Nunca devuelve un dataset
-// vacío como sustituto: o trae datos reales, o informa null/undefined para que quien llama
-// decida qué hacer (nunca se debe asumir "vacío" por defecto).
-async function leerDatosDelDiscoConReintentos(intentos, esperaMs){
-  intentos = intentos || 4;
-  esperaMs = esperaMs || 350;
-  for(let i=0; i<intentos; i++){
-    const resultado = await leerDatosDelDisco();
-    if(resultado !== undefined) return resultado; // null (no existe) u objeto válido: no hace falta reintentar
-    if(i < intentos-1) await new Promise(r=>setTimeout(r, esperaMs));
-  }
-  return undefined;
-}
-
 async function verificarCambiosRemotos(){
-  if(!rootHandle || sincronizando || hayModalAbierto()) return;
+  if(!rootHandle || !accessToken || sincronizando || hayModalAbierto()) return;
   sincronizando = true;
   try{
-    const fh = await obtenerArchivoJson();
-    if(!fh){ sincronizando = false; return; }
-    const file = await fh.getFile();
-    if(ultimoModificadoDisco !== null && file.lastModified === ultimoModificadoDisco){
-      sincronizando = false; return; // nadie más ha guardado desde la última vez
-    }
-    const fresh = await leerDatosDelDiscoConReintentos();
-    if(!fresh){ sincronizando = false; return; } // no se pudo leer bien tras reintentos; se prueba de nuevo en el próximo ciclo
+    const resp = await llamarSheets('GET', `/values/${encodeURIComponent(PESTANA_META+'!B1')}`);
+    const actualRemoto = (resp.values && resp.values[0] && resp.values[0][0]) || null;
+    if(actualRemoto === ultimoActualizadoRemoto){ sincronizando = false; return; } // nadie más ha guardado desde la última vez
+    const fresh = await leerFacturasDeSheets();
     // Si lo que ya teníamos cargado tenía bastantes facturas y lo recién leído aparece
     // vacío, es más probable que sea una lectura defectuosa que una limpieza real:
     // se ignora este ciclo y se reintenta más adelante, sin pisar lo que tenemos.
     if(Array.isArray(data && data.facturas) && data.facturas.length > 5 && fresh.facturas.length === 0){
       sincronizando = false; return;
     }
-    seedCatalogos(fresh);
     data = fresh;
-    ultimoModificadoDisco = file.lastModified;
+    ultimoActualizadoRemoto = fresh.actualizado;
     poblarCatalogos();
     poblarFiltrosDinamicos();
     aplicarFiltros();
@@ -806,6 +1008,14 @@ function normalizaNombre(s){
 // en el array, que puede cambiar si otro usuario agrega o quita registros).
 function claveFactura(f){
   return (f.proveedor||'') + '||' + (f.relPath || f.archivo || '');
+}
+
+// Sugiere el CIF/NIF para una factura nueva de un proveedor, tomándolo de cualquier otra
+// factura ya existente del mismo proveedor que ya tenga ese dato (ya no existe un catálogo
+// aparte de "terceros" con la migración a Google Sheets).
+function buscarCifProveedor(proveedor){
+  const existente = data.facturas.find(f=> f.proveedor === proveedor && f.campos && f.campos.cif);
+  return existente ? existente.campos.cif : null;
 }
 
 // Formato visual del número consecutivo de factura, p.ej. 1 -> "F-00001".
@@ -919,7 +1129,7 @@ document.getElementById('btnIncluirNuevos').addEventListener('click', async ()=>
   for(const n of seleccionados){
     let file;
     try{ file = await n.handleArchivo.getFile(); }catch(e){ continue; }
-    const tercero = data.terceros[n.carpeta];
+    const cifSugerido = buscarCifProveedor(n.carpeta);
     nuevasFacturas.push({
       proveedor: n.carpeta,
       archivo: n.archivo,
@@ -929,7 +1139,7 @@ document.getElementById('btnIncluirNuevos').addEventListener('click', async ()=>
       campos: {
         numero: null, fecha: null, base: null, iva: null, ivaPorcentaje: null,
         total: null, formaPago: null, retencionTiene: false, retencionPorcentaje: null,
-        retencionValor: null, cif: tercero ? tercero.cif : null, "Descuento": null,
+        retencionValor: null, cif: cifSugerido, "Descuento": null,
         "Forma de Pago": null, "Concepto": null, "Coincide Valores": false,
         "Centro de Costos": null, "Anticipo": "No", "Tipo de Gasto": null, activoFijo: "No"
       },
@@ -961,147 +1171,148 @@ function registrarAuditoria(factura){
   factura.modificadoFecha = new Date().toISOString();
 }
 
-/* ===================== Respaldos automáticos ===================== */
-// Antes de aplicar cualquier cambio, se guarda una copia de la última versión conocida
-// (Datos.backup.json) y, una vez al día, una copia fechada dentro de "_backups_datos".
-// Esto da una red de seguridad independiente de guardarCambios: si algo saliera mal en el
-// futuro, siempre hay de dónde recuperar. Los fallos aquí son avisos, no bloquean el guardado.
-async function crearRespaldos(freshAntesDeGuardar){
-  try{
-    const fhBackup = await rootHandle.getFileHandle('Datos.backup.json', {create:true});
-    const wBackup = await fhBackup.createWritable();
-    await wBackup.write(JSON.stringify(freshAntesDeGuardar, null, 2));
-    await wBackup.close();
-  }catch(e){ console.warn('No se pudo crear el respaldo rápido (Datos.backup.json):', e); }
+/* ===================== Respaldos ===================== */
+// Con Google Sheets ya no hace falta escribir copias de respaldo a mano: Sheets guarda su
+// propio historial de versiones automáticamente (menú de la hoja: Archivo > Historial de
+// versiones), con quién cambió qué y cuándo, y permite restaurar cualquier versión anterior
+// con un clic. Esa es ahora la red de seguridad principal contra pérdida de datos.
 
-  try{
-    const dirBackups = await rootHandle.getDirectoryHandle('_backups_datos', {create:true});
-    const hoy = new Date();
-    const pad = n=>String(n).padStart(2,'0');
-    const nombreHoy = `Datos_${hoy.getFullYear()}-${pad(hoy.getMonth()+1)}-${pad(hoy.getDate())}.json`;
-    let yaExiste = false;
-    try{ await dirBackups.getFileHandle(nombreHoy); yaExiste = true; }catch(e){ /* aún no existe, se crea abajo */ }
-    if(!yaExiste){
-      const fhDia = await dirBackups.getFileHandle(nombreHoy, {create:true});
-      const wDia = await fhDia.createWritable();
-      await wDia.write(JSON.stringify(freshAntesDeGuardar, null, 2));
-      await wDia.close();
-      // Limpieza: conservar solo los últimos 30 respaldos diarios para no acumular indefinidamente.
-      const nombres = [];
-      for await (const [nombre, entrada] of dirBackups.entries()){
-        if(entrada.kind === 'file' && nombre.startsWith('Datos_')) nombres.push(nombre);
-      }
-      nombres.sort();
-      const sobrantes = nombres.length - 30;
-      for(let i=0; i<sobrantes; i++){
-        try{ await dirBackups.removeEntry(nombres[i]); }catch(e){ /* no crítico */ }
-      }
-    }
-  }catch(e){ console.warn('No se pudo crear el respaldo diario (_backups_datos):', e); }
-}
-
-/* ===================== Guardado (lectura-fusión-escritura, con control de concurrencia) ===================== */
-// Con varios usuarios guardando "al mismo tiempo" sobre el mismo archivo en un disco de
-// red, el peligro real es este: dos personas leen el archivo casi al mismo instante,
-// cada una aplica su cambio sobre SU copia en memoria, y la segunda en escribir pisa a la
-// primera sin darse cuenta (el cambio de la primera desaparece aunque nadie cometió
-// ningún error). Para evitarlo, justo ANTES de escribir se vuelve a comprobar la fecha de
-// modificación del archivo en disco: si cambió desde que la leímos (porque alguien más
-// acaba de guardar), NO escribimos encima; se relee todo desde cero y se reintenta.
+/* ===================== Guardado (lectura-fusión-escritura, sin pisar cambios de otros) ===================== */
+// Cada vez que se guarda algo, se relee la hoja completa, se aplica SOLO el cambio de este
+// mutador (que siempre apunta a una factura concreta por su "clave", o agrega registros/
+// catálogos nuevos) y luego se escribe de vuelta ÚNICAMENTE lo que cambió: las filas
+// modificadas se reescriben por su número de fila real, las filas nuevas se agregan al final
+// (append) y los catálogos solo se reescriben si cambiaron. Como nunca se toca una fila que
+// este usuario no modificó, dos personas guardando casi al mismo tiempo sobre facturas
+// distintas nunca se pisan entre sí (a diferencia del archivo JSON, donde guardar significaba
+// siempre reescribir el archivo completo).
 async function guardarCambios(mutador){
   if(!rootHandle) return false;
-  const INTENTOS_MAX = 8;
+  const INTENTOS_MAX = 5;
 
   for(let intento=0; intento<INTENTOS_MAX; intento++){
-    let fh;
-    try{ fh = await obtenerArchivoJson(); }catch(e){ fh = null; }
-
-    let fresh, mtimeLeido;
-    if(!fh){
-      const crear = window.confirm('No se encontró Datos.json en la carpeta seleccionada. ¿Quieres crear uno nuevo (vacío)?');
-      if(!crear) return false;
-      fresh = { facturas: [], terceros: {} };
-      mtimeLeido = null; // no había archivo todavía
-    } else {
-      try{
-        fresh = await leerDatosDelDiscoConReintentos();
-      }catch(e){
-        toast('No se pudo leer Datos.json antes de guardar: ' + e.message + '. No se guardó nada.', true);
-        return false;
-      }
-      if(fresh === undefined){
-        // El archivo existe pero no se pudo interpretar como JSON tras varios intentos.
-        // NUNCA se sustituye por un dataset vacío: eso borraría todo. Se aborta el guardado.
-        toast('Datos.json no se pudo leer correctamente (puede estar siendo escrito por otro proceso justo ahora). No se guardó nada para evitar pérdida de datos. Intenta de nuevo en unos segundos.', true);
-        return false;
-      }
-      const fileLeido = await fh.getFile();
-      mtimeLeido = fileLeido.lastModified;
-    }
-
-    // Red de seguridad: si lo que tenemos cargado en memoria tiene bastantes facturas y lo
-    // que se acaba de leer del disco aparece vacío, algo no cuadra — se aborta en lugar de
-    // arriesgarse a sobrescribir.
-    if(Array.isArray(data && data.facturas) && data.facturas.length > 5 && fresh.facturas.length === 0){
-      toast('Aviso: Datos.json se leyó vacío justo ahora, pero antes tenía facturas. Por seguridad no se guardó nada. Intenta de nuevo.', true);
+    let fresh;
+    try{
+      fresh = await leerFacturasDeSheets();
+    }catch(e){
+      toast('No se pudo leer la hoja de Google Sheets antes de guardar: ' + e.message, true);
       return false;
     }
 
-    seedCatalogos(fresh);
+    // Red de seguridad: si lo que tenemos cargado en memoria tiene bastantes facturas y lo
+    // que se acaba de leer de la hoja aparece vacío, algo no cuadra — se aborta en lugar de
+    // arriesgarse a sobrescribir.
+    if(Array.isArray(data && data.facturas) && data.facturas.length > 5 && fresh.facturas.length === 0){
+      toast('Aviso: la hoja se leyó vacía justo ahora, pero antes tenía facturas. Por seguridad no se guardó nada. Intenta de nuevo.', true);
+      return false;
+    }
+
+    // Foto de "antes" (por clave estable), para saber después qué filas cambiaron realmente.
+    const antes = new Map(fresh.facturas.map(f=>[claveFactura(f), JSON.stringify(f)]));
+    const catalogosAntes = JSON.stringify(fresh.catalogos);
+
     mutador(fresh);
-    fresh.actualizado = new Date().toISOString();
-    const facturasEsperadas = fresh.facturas.length;
-    const contenidoNuevo = JSON.stringify(fresh, null, 2);
+    asignarIdsFaltantes(fresh); // si ya todas tenían id, no hace nada
+
+    const nuevas = [];
+    const modificadas = [];
+    fresh.facturas.forEach(f=>{
+      const clave = claveFactura(f);
+      const antesJson = antes.get(clave);
+      if(antesJson === undefined) nuevas.push(f);
+      else if(antesJson !== JSON.stringify(f)) modificadas.push(f);
+    });
+    const catalogosCambiaron = JSON.stringify(fresh.catalogos) !== catalogosAntes;
+
+    if(nuevas.length === 0 && modificadas.length === 0 && !catalogosCambiaron){
+      data = fresh; // nada que escribir, pero sí refrescamos la copia en memoria
+      return true;
+    }
 
     try{
-      // Justo antes de escribir: ¿sigue el archivo tal como lo leímos, o alguien más
-      // guardó algo en el rato que tardamos en preparar nuestro cambio?
-      const fhComprobar = await rootHandle.getFileHandle(jsonFileName, {create:true});
-      const fileComprobar = await fhComprobar.getFile();
-      if(mtimeLeido !== null && fileComprobar.lastModified !== mtimeLeido){
-        // Otro usuario guardó justo en este momento: no escribimos encima de su cambio.
-        // Esperamos un instante (aleatorio, para no chocar de nuevo con la misma persona)
-        // y reintentamos desde cero, releyendo la versión más reciente.
-        await new Promise(r=>setTimeout(r, 150 + Math.random()*350));
-        continue;
+      if(modificadas.length > 0){
+        const dataRanges = modificadas.map(f=>({
+          range: `${PESTANA_FACTURAS}!A${f._fila}:${colLetra(ENCABEZADOS_FACTURAS.length-1)}${f._fila}`,
+          values: [facturaAFila(f)]
+        }));
+        await llamarSheets('POST', '/values:batchUpdate', { valueInputOption:'RAW', data: dataRanges });
       }
+      if(nuevas.length > 0){
+        await llamarSheets('POST',
+          `/values/${encodeURIComponent(PESTANA_FACTURAS+'!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+          { values: nuevas.map(f=> facturaAFila(f)) });
+      }
+      if(catalogosCambiaron){
+        await escribirCatalogos(fresh.catalogos);
+      }
+      const marcaTiempo = new Date().toISOString();
+      await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_META+'!B1')}?valueInputOption=RAW`, { values: [[marcaTiempo]] });
 
-      // Respaldo de la versión conocida-buena, justo antes de reemplazarla.
-      await crearRespaldos(fresh);
-
-      const writable = await fhComprobar.createWritable();
-      await writable.write(contenidoNuevo);
-      await writable.close();
+      fresh.actualizado = marcaTiempo;
       data = fresh;
-
-      // Verificación posterior: releemos lo que quedó realmente en disco.
-      try{
-        const fhVerif = await rootHandle.getFileHandle(jsonFileName);
-        const fileVerif = await fhVerif.getFile();
-        ultimoModificadoDisco = fileVerif.lastModified;
-        const textoVerif = await fileVerif.text();
-        const verificado = JSON.parse(textoVerif);
-        if(!Array.isArray(verificado.facturas) || verificado.facturas.length !== facturasEsperadas){
-          toast('Aviso: el archivo guardado no quedó como se esperaba. Revisa Datos.json; hay copias de respaldo en Datos.backup.json y en la carpeta _backups_datos.', true);
-        }
-      }catch(e){
-        toast('Aviso: no se pudo verificar que el guardado quedara correcto. Revisa Datos.json.', true);
-      }
+      ultimoActualizadoRemoto = marcaTiempo;
       return true;
     }catch(e){
-      toast('Error guardando Datos.json: ' + e.message, true);
+      if(intento < INTENTOS_MAX-1){
+        await new Promise(r=>setTimeout(r, 200 + Math.random()*400));
+        continue; // se reintenta desde cero releyendo la hoja
+      }
+      toast('Error guardando en Google Sheets: ' + e.message, true);
       return false;
     }
   }
 
-  toast('No se pudo guardar: hay demasiada actividad simultánea de otros usuarios en este momento. Intenta de nuevo.', true);
+  toast('No se pudo guardar: hay demasiada actividad simultánea en este momento. Intenta de nuevo.', true);
   return false;
 }
+
+/* ===================== Migración desde Datos.json (una sola vez) ===================== */
+async function migrarDesdeJsonLocal(){
+  if(!rootHandle){ toast('Primero conecta la carpeta que contiene el Datos.json a migrar.', true); return; }
+  if(!accessToken){ toast('Primero conéctate con Google.', true); return; }
+  if(!window.confirm('Esto va a leer el Datos.json de la carpeta conectada y agregar sus facturas y catálogos a la hoja de Google Sheets conectada. Solo debe hacerse una vez (si se ejecuta dos veces, las facturas quedarían duplicadas). ¿Continuar?')) return;
+
+  let fh;
+  try{ fh = await obtenerArchivoJson(); }catch(e){ fh = null; }
+  if(!fh){ toast('No se encontró Datos.json en la carpeta seleccionada.', true); return; }
+
+  let viejo;
+  try{
+    const file = await fh.getFile();
+    viejo = JSON.parse(await file.text());
+  }catch(e){ toast('No se pudo leer/interpretar Datos.json: ' + e.message, true); return; }
+  if(!Array.isArray(viejo.facturas) || viejo.facturas.length === 0){ toast('Datos.json no tiene facturas para migrar.', true); return; }
+
+  toast(`Migrando ${viejo.facturas.length} factura(s)... esto puede tardar unos segundos.`);
+  try{
+    await asegurarEstructuraHoja();
+    const filas = viejo.facturas.map(f=> facturaAFila(f));
+    await llamarSheets('POST',
+      `/values/${encodeURIComponent(PESTANA_FACTURAS+'!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { values: filas });
+
+    const catalogosViejos = (viejo.catalogos && typeof viejo.catalogos === 'object') ? viejo.catalogos : {};
+    const catalogosFinal = {
+      tipoGasto: Array.isArray(catalogosViejos.tipoGasto) ? catalogosViejos.tipoGasto : [...TIPO_GASTO_OPTIONS],
+      formaPago: Array.isArray(catalogosViejos.formaPago) ? catalogosViejos.formaPago : [...FORMA_PAGO_OPTIONS],
+      centroCosto: Array.isArray(catalogosViejos.centroCosto) ? catalogosViejos.centroCosto : [...CENTRO_COSTO_OPTIONS]
+    };
+    await escribirCatalogos(catalogosFinal);
+    await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_META+'!B1')}?valueInputOption=RAW`, { values: [[new Date().toISOString()]] });
+
+    toast(`Migración completa: ${filas.length} factura(s) agregadas a la hoja.`);
+    cerrarModal('modalConfig');
+    await cargarTodo();
+  }catch(e){
+    toast('Error durante la migración: ' + e.message, true);
+  }
+}
+document.getElementById('btnMigrarJson').addEventListener('click', migrarDesdeJsonLocal);
 
 /* ===================== Sidebar meses ===================== */
 function renderSidebar(){
   const resumen = document.getElementById('resumenLateral');
-  resumen.textContent = `${data.facturas.length} facturas · ${Object.keys(data.terceros).length} proveedores`;
+  resumen.textContent = `${data.facturas.length} facturas · ${new Set(data.facturas.map(f=>f.proveedor)).size} proveedores`;
   const labelUsuario = document.getElementById('usuarioActualLabel');
   if(labelUsuario) labelUsuario.textContent = usuarioActual || '-';
 
@@ -1167,7 +1378,7 @@ function llenarSelect(id, valores, placeholder){
   sel.value = actual;
 }
 
-/* ===================== Catálogos configurables (persistidos en Datos.json) ===================== */
+/* ===================== Catálogos configurables (persistidos en la pestaña "Catalogos" de Sheets) ===================== */
 // Definición de cada catálogo editable: sus valores por defecto (semilla) y, si aplica,
 // la(s) clave(s) del campo de la factura donde se usa ese valor (para poder propagar renombres).
 const DEFS_CATALOGOS = {
@@ -1649,7 +1860,7 @@ document.getElementById('btnGuardarFactura').addEventListener('click', async ()=
   };
   const nuevoRevisado = document.getElementById('c_revisado').checked;
 
-  // Se relee Datos.json justo antes de escribir y solo se aplica el cambio de ESTA
+  // Se relee la hoja de Sheets justo antes de escribir y solo se aplica el cambio de ESTA
   // factura sobre esa versión fresca, para no pisar ediciones que hayan hecho otros
   // usuarios en otras facturas mientras este formulario estaba abierto.
   const ok = await guardarCambios((fresh)=>{
