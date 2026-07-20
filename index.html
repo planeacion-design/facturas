@@ -878,6 +878,12 @@ function filaDatosAFactura(encabezados, fila, numFila){
 
 // Hace el camino inverso: a partir de un objeto factura, arma la fila de valores en el
 // mismo orden que ENCABEZADOS_FACTURAS, lista para escribir en la hoja.
+// IMPORTANTE: usa valorCampo() (igual que el resto de la app) para leer los campos que
+// tuvieron nombre antiguo en camelCase antes de la migración de esquema (formaPago,
+// concepto, centroCosto, anticipo, descuento). Si esto no se hiciera así, cualquier
+// factura de Datos.json que todavía tuviera esos datos guardados con el nombre viejo
+// se escribiría en Sheets con esas columnas en blanco, como si nunca se hubiera llenado
+// esa información (aunque sí estaba, solo que bajo la otra clave).
 function facturaAFila(f){
   const c = f.campos || {};
   const val = v => (v===null || v===undefined) ? '' : v;
@@ -887,9 +893,14 @@ function facturaAFila(f){
     motivoError: val(f.motivoError), modificadoPor: val(f.modificadoPor), modificadoFecha: val(f.modificadoFecha),
     cif: val(c.cif), numero: val(c.numero), fecha: val(c.fecha), base: val(c.base), iva: val(c.iva),
     ivaPorcentaje: val(c.ivaPorcentaje), total: val(c.total), retencionPorcentaje: val(c.retencionPorcentaje),
-    retencionValor: val(c.retencionValor), retencionTiene: !!c.retencionTiene, 'Descuento': val(c['Descuento']),
-    'Forma de Pago': val(c['Forma de Pago']), 'Concepto': val(c['Concepto']), 'Coincide Valores': !!c['Coincide Valores'],
-    'Centro de Costos': val(c['Centro de Costos']), 'Anticipo': val(c['Anticipo']), 'Tipo de Gasto': val(c['Tipo de Gasto']),
+    retencionValor: val(c.retencionValor), retencionTiene: !!c.retencionTiene,
+    'Descuento': val(valorCampo(c, ['Descuento','descuento'])),
+    'Forma de Pago': val(valorCampo(c, ['Forma de Pago','formaPago'])),
+    'Concepto': val(valorCampo(c, ['Concepto','concepto'])),
+    'Coincide Valores': !!c['Coincide Valores'],
+    'Centro de Costos': val(valorCampo(c, ['Centro de Costos','centroCosto'])),
+    'Anticipo': val(valorCampo(c, ['Anticipo','anticipo'])),
+    'Tipo de Gasto': val(valorCampo(c, ['Tipo de Gasto'])),
     activoFijo: val(c.activoFijo), texto: val(f.texto)
   };
   return ENCABEZADOS_FACTURAS.map(h=> mapa[h]);
