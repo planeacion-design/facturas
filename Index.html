@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facturas</title>
+<style>
+  :root{
+    --azul:#3b6ef6; --azul-vivo:#2f5cf0; --azul-osc:#111a33; --azul-suave:#eef3ff;
+    --gris-100:#f5f7fa; --gris-200:#e7ebf0;
+    --gris-300:#d3d9e0; --gris-500:#8b95a1; --gris-700:#4a5568; --texto:#1f2937;
+    --verde:#16a34a; --rojo:#ef4444; --naranja:#f97316; --amarillo:#eab308;
+    --blanco:#fff; --sombra:0 4px 16px rgba(20,30,50,.1);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--gris-100);color:var(--texto);font-size:14px;}
+  button{font-family:inherit;cursor:pointer;transition:all .15s ease;}
+  input,select,button{font-family:inherit;font-size:14px;}
+  input[type=checkbox]{accent-color:var(--azul-vivo);}
+
+  /* ---------- Landing ---------- */
+  #landing{position:fixed;inset:0;background:linear-gradient(135deg,var(--azul-osc) 0%,var(--azul-vivo) 55%,#5b8bff 100%);
+    display:flex;align-items:center;justify-content:center;z-index:1000;color:#fff;text-align:center;}
+  #landing .box{max-width:540px;padding:40px;}
+  #landing h1{font-size:26px;margin-bottom:8px;font-weight:800;letter-spacing:-.01em;}
+  #landing p{opacity:.85;line-height:1.5;margin-bottom:24px;}
+  .chip-usuario{border-radius:999px;padding:8px 16px;font-size:13.5px;font-weight:600;border:1px solid transparent;}
+  #landing .usuarios{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:26px;}
+  #landing .chip-usuario{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff;}
+  #landing .chip-usuario:hover{background:rgba(255,255,255,.22);transform:translateY(-1px);}
+  #landing .chip-usuario.activo{background:#fff;color:var(--azul-vivo);border-color:#fff;}
+  #landing button#btnSeleccionar{background:#fff;color:var(--azul-vivo);border:none;border-radius:10px;padding:14px 30px;font-size:16px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);}
+  #landing button#btnSeleccionar:hover:not(:disabled){background:#eef3fa;transform:translateY(-1px);}
+  #landing button#btnSeleccionar:disabled{opacity:.5;cursor:not-allowed;}
+  #landing .aviso{margin-top:20px;font-size:12px;background:rgba(255,255,255,.14);border-radius:10px;padding:10px 14px;}
+  #landing .error{margin-top:16px;color:#ffd7d0;font-size:13px;}
+  .usuarios{display:flex;flex-wrap:wrap;gap:8px;}
+  .modal .usuarios .chip-usuario{background:var(--azul-suave);border:1px solid var(--gris-300);color:var(--azul-osc);}
+  .modal .usuarios .chip-usuario:hover{background:#dfe9ff;}
+  .modal .usuarios .chip-usuario.activo{background:var(--azul-vivo);color:#fff;border-color:var(--azul-vivo);}
+
+  /* ---------- Layout ---------- */
+  #app{display:none;height:100vh;grid-template-columns:250px 1fr;}
+  #app.activo{display:grid;}
+  #sidebar{background:var(--azul-osc);color:#fff;overflow-y:auto;padding:16px 0;}
+  #sidebar h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;padding:0 16px;margin:18px 0 8px;}
+  #sidebar .resumen{padding:0 16px 12px;font-size:12px;opacity:.75;border-bottom:1px solid rgba(255,255,255,.12);}
+  .mes-item{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;cursor:pointer;font-size:13px;}
+  .mes-item:hover{background:rgba(255,255,255,.08);}
+  .mes-item.activo{background:var(--azul);font-weight:600;}
+  .mes-item .badge-count{background:rgba(255,255,255,.18);border-radius:10px;padding:1px 8px;font-size:11px;}
+  .mes-item.activo .badge-count{background:rgba(255,255,255,.3);}
+  #sidebar .btn-limpiar{margin:12px 16px;width:calc(100% - 32px);background:transparent;color:#cfe0f2;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:7px;font-size:12px;}
+  #sidebar .btn-limpiar:hover{background:rgba(255,255,255,.1);}
+  #sidebar .btn-reload{margin:4px 16px 12px;width:calc(100% - 32px);background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:6px;padding:8px;font-size:12px;}
+  #sidebar .btn-reload:hover{background:rgba(255,255,255,.16);}
+
+  #main{overflow-y:auto;display:flex;flex-direction:column;height:100vh;}
+  #topbar{background:#fff;border-bottom:1px solid var(--gris-300);padding:14px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;z-index:10;}
+  #topbar input[type=search]{flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--gris-300);border-radius:8px;transition:border-color .15s, box-shadow .15s;}
+  #topbar input[type=search]:focus{outline:none;border-color:var(--azul);box-shadow:0 0 0 3px rgba(59,110,246,.15);}
+  #topbar select{padding:8px 10px;border:1px solid var(--gris-300);border-radius:8px;background:#fff;}
+  #topbar .titulo{font-weight:700;font-size:16px;color:var(--azul-osc);margin-right:8px;white-space:nowrap;}
+  #topbar .spacer{flex-basis:100%;height:0;}
+  .filtros-fila{display:flex;flex-wrap:wrap;gap:8px;padding:0 20px 12px;background:#fff;border-bottom:1px solid var(--gris-300);}
+  .filtros-fila select{padding:6px 8px;border:1px solid var(--gris-300);border-radius:6px;background:#fff;font-size:12.5px;}
+  .filtros-fila .btn-clear{border:1px solid var(--gris-300);background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--gris-700);}
+
+  #contenido{padding:16px 20px 40px;}
+  .info-fila{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12.5px;color:var(--gris-700);}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--sombra);font-size:12.5px;}
+  thead th{background:var(--azul-suave);color:var(--azul-osc);text-align:left;padding:10px 8px;border-bottom:2px solid var(--gris-300);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;font-weight:700;}
+  thead th:hover{background:#e2ecff;}
+  thead th .arrow{font-size:10px;opacity:.5;margin-left:3px;}
+  thead th.activo{color:var(--azul-vivo);} thead th.activo .arrow{opacity:1;color:var(--azul-vivo);}
+  tbody td{padding:8px;border-bottom:1px solid var(--gris-200);vertical-align:middle;white-space:nowrap;}
+  tbody tr{cursor:pointer;transition:background .1s ease;}
+  tbody tr:hover{background:var(--azul-suave);}
+  tbody tr.pendiente td:first-child{box-shadow:inset 3px 0 0 var(--rojo);}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;color:#fff;}
+  .tag-anticipo{background:var(--naranja);}
+  .tag-inmov{background:var(--amarillo);color:#3a2c00;}
+  .tag-row{display:flex;gap:4px;flex-wrap:wrap;}
+  .archivo-cell{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;}
+  .dot-ok{background:var(--verde);} .dot-pend{background:var(--rojo);}
+  .acciones{display:flex;gap:6px;align-items:center;}
+  .btn-icon{border:1px solid var(--gris-300);background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;}
+  .btn-icon:hover{background:var(--gris-100);border-color:var(--azul);color:var(--azul-vivo);}
+  .chk-revisado{width:16px;height:16px;}
+
+  #paginacion{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;font-size:12.5px;color:var(--gris-700);}
+  #paginacion button{border:1px solid var(--gris-300);background:#fff;border-radius:6px;padding:6px 10px;}
+  #paginacion button:disabled{opacity:.4;cursor:default;}
+
+  /* ---------- Modal genérico ---------- */
+  .modal-fondo{position:fixed;inset:0;background:rgba(15,25,40,.55);display:none;align-items:center;justify-content:center;z-index:500;padding:24px;}
+  .modal-fondo.activo{display:flex;}
+  .modal{background:#fff;border-radius:12px;max-width:1100px;width:100%;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modal-header{padding:16px 20px;border-bottom:1px solid var(--gris-200);display:flex;justify-content:space-between;align-items:center;}
+  .modal-header h3{margin:0;font-size:16px;}
+  .modal-header button{border:none;background:transparent;font-size:20px;color:var(--gris-500);}
+  .modal-body{overflow-y:auto;padding:0;flex:1;}
+  .modal-footer{padding:14px 20px;border-top:1px solid var(--gris-200);display:flex;justify-content:flex-end;gap:10px;}
+
+  /* Edit modal split */
+  .editor-grid{display:grid;grid-template-columns:1fr 1fr;height:74vh;}
+  .preview-pane{background:#525659;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .preview-pane iframe{width:100%;height:100%;border:none;background:#fff;}
+  .preview-pane .sin-preview{color:#cfd3d6;font-size:13px;text-align:center;padding:20px;}
+  .form-pane{overflow-y:auto;padding:20px;}
+  .form-badges{display:flex;gap:8px;margin-bottom:14px;min-height:24px;}
+  .campo{margin-bottom:14px;}
+  .campo label{display:block;font-size:12px;font-weight:600;color:var(--gris-700);margin-bottom:4px;}
+  .campo input[type=text],.campo input[type=number],.campo input[type=date],.campo select{
+    width:100%;padding:8px 10px;border:1px solid var(--gris-300);border-radius:7px;}
+  .campo .con-simbolo{position:relative;}
+  .campo .con-simbolo input{padding-right:30px;}
+  .campo .con-simbolo span{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--gris-500);font-size:12px;}
+  .campo .con-prefijo input{padding-left:24px;}
+  .campo .con-prefijo span{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gris-500);font-size:12px;}
+  .fila-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .fila-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .check-linea{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .check-linea label{font-size:13px;font-weight:600;color:var(--texto);}
+  hr.sep{border:none;border-top:1px solid var(--gris-200);margin:16px 0;}
+
+  /* Nuevos archivos modal */
+  .lista-nuevos{max-height:360px;overflow-y:auto;padding:0 20px;}
+  .fila-nuevo{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gris-200);font-size:13px;}
+  .fila-nuevo .carpeta{color:var(--gris-500);font-size:11.5px;}
+
+  /* Configuración de catálogos */
+  .config-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+  .config-seccion{background:var(--gris-100);border:1px solid var(--gris-200);border-radius:10px;padding:12px;display:flex;flex-direction:column;}
+  .config-seccion h4{margin:0 0 8px;font-size:13px;color:var(--azul-osc);}
+  .config-lista{max-height:260px;overflow-y:auto;flex:1;margin-bottom:10px;display:flex;flex-direction:column;gap:5px;}
+  .config-item{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--gris-300);border-radius:7px;padding:5px 8px;font-size:12px;}
+  .config-item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .config-item button{border:none;background:transparent;font-size:12px;padding:2px 4px;border-radius:4px;color:var(--gris-500);}
+  .config-item button:hover{background:var(--gris-200);color:var(--texto);}
+  .config-item button.eliminar:hover{color:var(--rojo);}
+  .config-item button.editar:hover{color:var(--azul-vivo);}
+  .config-agregar{display:flex;gap:6px;}
+  .config-agregar input{flex:1;padding:6px 8px;border:1px solid var(--gris-300);border-radius:6px;font-size:12px;min-width:0;}
+  .config-agregar button{white-space:nowrap;font-size:12px;}
+  @media (max-width: 720px){ .config-grid{grid-template-columns:1fr;} }
+
+  .toast-cont{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px;}
+  .toast{background:var(--azul-osc);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;box-shadow:var(--sombra);animation:aparecer .2s ease;}
+  .toast.error{background:var(--rojo);}
+  @keyframes aparecer{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING ============ -->
+<div id="landing">
+  <div class="box">
+    <h1>Facturas</h1>
+    <p>¿Quién eres? Selecciona tu nombre para continuar.</p>
+    <div class="usuarios" id="listaUsuarios"></div>
+    <p>Selecciona la carpeta raíz que contiene las carpetas de proveedores y el archivo <strong>Datos.json</strong>.</p>
+    <button id="btnSeleccionar" disabled>📁 Seleccionar carpeta</button>
+    <div class="aviso">Requiere Chrome o Edge de escritorio (API de acceso a archivos locales). No funciona en Firefox ni Safari.</div>
+    <div class="error" id="landingError" style="display:none;"></div>
+    <div style="margin-top:14px;font-size:11px;opacity:.6;" id="versionInfoLanding"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <div id="sidebar">
+    <div class="resumen" id="resumenLateral">Cargando...</div>
+    <div class="resumen" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>👤 <strong id="usuarioActualLabel">-</strong></span>
+      <button class="btn-limpiar" id="btnCambiarUsuario" style="margin:0;width:auto;padding:4px 10px;">Cambiar</button>
+    </div>
+    <h2>Meses</h2>
+    <div id="listaMeses"></div>
+    <button class="btn-limpiar" id="btnLimpiarMes">Quitar filtro de mes</button>
+    <button class="btn-reload" id="btnRescan">🔄 Buscar archivos nuevos</button>
+    <button class="btn-reload" id="btnConfiguracion">⚙️ Configuración</button>
+    <div style="margin-top:14px;padding:0 16px;font-size:10.5px;opacity:.45;text-align:center;" id="versionInfoSidebar"></div>
+  </div>
+
+  <div id="main">
+    <div id="topbar">
+      <span class="titulo">Facturas</span>
+      <input type="search" id="buscador" placeholder="Buscar por proveedor, CIF, nº factura, concepto, archivo...">
+      <select id="pageSize">
+        <option value="25">25 / página</option>
+        <option value="50" selected>50 / página</option>
+        <option value="100">100 / página</option>
+        <option value="250">250 / página</option>
+      </select>
+    </div>
+    <div class="filtros-fila">
+      <select id="fProveedor"><option value="">Proveedor: todos</option></select>
+      <select id="fCentro"><option value="">Centro de costos: todos</option></select>
+      <select id="fFormaPago"><option value="">Forma de pago: todas</option></select>
+      <select id="fEstado">
+        <option value="">Estado: todos</option>
+        <option value="ok">Ok</option>
+        <option value="pendiente">Pendiente</option>
+      </select>
+      <select id="fRevisado">
+        <option value="">Revisado: todos</option>
+        <option value="si">Revisado</option>
+        <option value="no">Sin revisar</option>
+      </select>
+      <select id="fAnticipo">
+        <option value="">Anticipo: todos</option>
+        <option value="Sí">Sí</option>
+        <option value="No">No</option>
+      </select>
+      <select id="fInmov">
+        <option value="">Inmovilizado: todos</option>
+        <option value="Sí">Sí</option>
+        <option value="No">No</option>
+      </select>
+      <select id="fTipoGasto"><option value="">Tipo de gasto: todos</option></select>
+      <button class="btn-clear" id="btnLimpiarFiltros">Limpiar filtros</button>
+    </div>
+
+    <div id="contenido">
+      <div class="info-fila" id="infoResultados"></div>
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr id="filaCabecera"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      </div>
+      <div id="paginacion"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: nuevos archivos ============ -->
+<div class="modal-fondo" id="modalNuevos">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header"><h3>Archivos nuevos encontrados</h3><button data-cerrar="modalNuevos">✕</button></div>
+    <p style="padding:0 20px;color:var(--gris-700);font-size:13px;">Se encontraron <strong id="cantidadNuevos">0</strong> archivo(s) que no están en Datos.json. Selecciona los que quieras incluir.</p>
+    <div class="lista-nuevos" id="listaNuevos"></div>
+    <div class="modal-footer">
+      <button class="btn-icon" data-cerrar="modalNuevos">Ahora no</button>
+      <button class="btn-icon" id="btnIncluirNuevos" style="background:var(--azul);color:#fff;border-color:var(--azul);">Incluir seleccionados</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: configuración de catálogos ============ -->
+<div class="modal-fondo" id="modalConfig">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header"><h3>Configuración de catálogos</h3><button data-cerrar="modalConfig">✕</button></div>
+    <div class="modal-body" style="padding:18px 20px 22px;">
+      <p style="margin:0 0 16px;color:var(--gris-700);font-size:12.5px;">Agrega, renombra o elimina las opciones que aparecen en los selectores de Tipo de Gasto, Forma de Pago y Centro de Costos. Los cambios se guardan en Datos.json.</p>
+      <div class="config-grid">
+        <div class="config-seccion" data-catalogo="tipoGasto">
+          <h4>Tipo de Gasto</h4>
+          <div class="config-lista" id="configLista_tipoGasto"></div>
+          <div class="config-agregar">
+            <input type="text" id="configNuevo_tipoGasto" placeholder="Nueva categoría...">
+            <button class="btn-icon" data-agregar="tipoGasto">+ Agregar</button>
+          </div>
+        </div>
+        <div class="config-seccion" data-catalogo="formaPago">
+          <h4>Forma de Pago</h4>
+          <div class="config-lista" id="configLista_formaPago"></div>
+          <div class="config-agregar">
+            <input type="text" id="configNuevo_formaPago" placeholder="Nueva forma de pago...">
+            <button class="btn-icon" data-agregar="formaPago">+ Agregar</button>
+          </div>
+        </div>
+        <div class="config-seccion" data-catalogo="centroCosto">
+          <h4>Centro de Costos</h4>
+          <div class="config-lista" id="configLista_centroCosto"></div>
+          <div class="config-agregar">
+            <input type="text" id="configNuevo_centroCosto" placeholder="Nuevo centro de costos...">
+            <button class="btn-icon" data-agregar="centroCosto">+ Agregar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: cambiar usuario ============ -->
+<div class="modal-fondo" id="modalUsuario">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header"><h3>Cambiar de usuario</h3><button data-cerrar="modalUsuario">✕</button></div>
+    <div style="padding:4px 20px 22px;">
+      <div class="usuarios" id="listaUsuariosModal" style="justify-content:flex-start;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: editar factura ============ -->
+<div class="modal-fondo" id="modalEditar">
+  <div class="modal">
+    <div class="modal-header">
+      <div><h3 id="tituloEditar">Editar factura</h3><div id="ultimaModificacion" style="font-size:11.5px;color:var(--gris-500);margin-top:2px;"></div></div>
+      <button data-cerrar="modalEditar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="editor-grid">
+        <div class="preview-pane" id="previewPane"><div class="sin-preview">Cargando vista previa...</div></div>
+        <div class="form-pane">
+          <div class="form-badges" id="formBadges"></div>
+          <form id="formEditar">
+            <div class="fila-2">
+              <div class="campo"><label>Proveedor</label><input type="text" id="c_proveedor" disabled></div>
+              <div class="campo"><label>CIF / NIF</label><input type="text" id="c_cif"></div>
+            </div>
+            <div class="fila-2">
+              <div class="campo"><label>No. Factura</label><input type="text" id="c_numero"></div>
+              <div class="campo"><label>Fecha Factura</label><input type="date" id="c_fecha"></div>
+            </div>
+            <div class="fila-3">
+              <div class="campo con-prefijo"><label>Base Imponible</label><span>€</span><input type="number" step="0.01" id="c_base"></div>
+              <div class="campo con-prefijo"><label>IVA</label><span>€</span><input type="number" step="0.01" id="c_iva"></div>
+              <div class="campo con-simbolo"><label>Porcentaje IVA %</label><span>%</span><input type="number" step="0.01" id="c_ivaPorcentaje"></div>
+            </div>
+            <div class="fila-3">
+              <div class="campo con-prefijo"><label>Total</label><span>€</span><input type="number" step="0.01" id="c_total"></div>
+              <div class="campo con-simbolo"><label>Porcentaje Rte %</label><span>%</span><input type="number" step="0.01" id="c_retencionPorcentaje"></div>
+              <div class="campo con-prefijo"><label>Valor Retención</label><span>€</span><input type="number" step="0.01" id="c_retencionValor"></div>
+            </div>
+            <div class="fila-2">
+              <div class="campo con-prefijo"><label>Descuento</label><span>€</span><input type="number" step="0.01" id="c_descuento"></div>
+            </div>
+
+            <hr class="sep">
+
+            <div class="campo">
+              <label>Forma de Pago</label>
+              <input type="text" id="c_formaPago" list="dl_formaPago" autocomplete="off" placeholder="Escribe para buscar...">
+              <datalist id="dl_formaPago"></datalist>
+            </div>
+            <div class="campo">
+              <label>Concepto</label>
+              <textarea id="c_concepto" rows="2" placeholder="Describe brevemente la factura..." style="width:100%;padding:8px 10px;border:1px solid var(--gris-300);border-radius:7px;resize:vertical;font-family:inherit;"></textarea>
+            </div>
+            <div class="campo">
+              <label>Centro de Costos</label>
+              <input type="text" id="c_centroCosto" list="dl_centroCosto" autocomplete="off" placeholder="Escribe para buscar...">
+              <datalist id="dl_centroCosto"></datalist>
+            </div>
+            <div class="campo">
+              <label>Tipo de Gasto</label>
+              <select id="c_tipoGasto"><option value="">Selecciona...</option></select>
+            </div>
+
+            <div class="fila-2">
+              <div class="campo">
+                <label>Inmovilizado</label>
+                <select id="c_activoFijo"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </div>
+              <div class="campo">
+                <label>Anticipo</label>
+                <select id="c_anticipo"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </div>
+            </div>
+
+            <div class="campo"><label>Fichero</label><input type="text" id="c_archivo" disabled></div>
+
+            <div class="check-linea">
+              <input type="checkbox" class="chk-revisado" id="c_revisado">
+              <label for="c_revisado">Factura revisada</label>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-icon" data-cerrar="modalEditar">Cancelar</button>
+      <button class="btn-icon" id="btnGuardarFactura" style="background:var(--verde);color:#fff;border-color:var(--verde);">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-cont" id="toastCont"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ===================== Catálogos fijos ===================== */
+const FORMA_PAGO_OPTIONS = [
+  "Cuenta Gastos","Cuenta Ingresos","Cuenta Donaciones","Cuenta Seguridad","Cuenta IBER","Cuentas SBL",
+  "TC 66","TC 55","TCM SANT","TCM SABADEL","TCM BILBAO","TCM VALENCIA","TCM PALMA","TCM ALICANTE",
+  "TCM CASTELLON","TCM LANZAROTE","TCM LLEIDA","TCM MALAGA","TCM ACORUÑA","TCM SEVILLA","TCM TARRAGONA",
+  "TCM TORREVIEJA","TCM ZARAGOZA"
+];
+const TIPO_GASTO_OPTIONS = [
+  "Alojamiento y Hospedaje",
+  "Alquiler de Equipos",
+  "Alquiler de Equipos Audio Visuales",
+  "Alquiler de Equipos Informáticos",
+  "Alquiler de Inmuebles y Locales",
+  "Alquiler de Salón de Reunión",
+  "Alquiler de Vehículos",
+  "Anticipo Adquisión Inmobilizado Material",
+  "Combustible",
+  "Comisiones Bancarias",
+  "Compra Otro Inmobilizado Material",
+  "Control de Plagas",
+  "Cuotas de Comunidad y Asociaciones",
+  "Equipos Informáticos y Ofimática",
+  "Mantenimiento - Aplicaciones Informáticas",
+  "Mantenimiento de Equipos Informáticos",
+  "Mantenimiento de Equipos Maquinaria",
+  "Mantenimiento de Vehículos",
+  "Mantenimiento Ofimática - Programas-Software",
+  "Mantenimiento y Conservación de Inmuebles",
+  "Material de Limpieza y Aseo",
+  "Material de Oficina y Papelería",
+  "Mensajería y Paquetería",
+  "Mobiliario y Equipamiento",
+  "Multas y Sanciones",
+  "Protección Contra Incendios",
+  "Publicidad y Propaganda",
+  "Seguridad y Vigilancia",
+  "Seguros",
+  "Seguros Bienes Inmuebles",
+  "Seguros Maquinaria",
+  "Seguros Responsabilidad Civil",
+  "Seguros Sociales y Cotizaciones",
+  "Seguros Vehículos",
+  "Servicios Profesionales - Abogados, Notarías, Registros",
+  "Servicios Profesionales - Arquitectos, Aparejadores",
+  "Servicios Profesionales (Asesoría)",
+  "Suministro de Agua",
+  "Suministro de Gas",
+  "Suministro Eléctrico",
+  "Tasas y Tributos",
+  "Telefonía e Internet",
+  "Transportes",
+  "Viajes y Desplazamientos",
+  "Otros Gastos / Sin Clasificar"
+];
+const CENTRO_COSTO_OPTIONS = [
+  "A CORUÑA","ALBACETE","ALCUDIA","ALICANTE","ALMERÍA","ÁVILA","BADAJOZ","BARCELONA","BENIDORM","BILBAO",
+  "CÁDIZ","CARTAGENA","CASTELLÓN","CIUTADELLA","CÓRDOBA","DENIA","EL EJIDO","ELCHE","FUENLABRADA",
+  "FUERTEVENTURA","GALICIA","GIRONA","GRAN CANARIA","GRANADA","GUADALAJARA","HOSPITALET","HUELVA","HUESCA",
+  "IBIZA","LANZAROTE","LAS ROZAS","LEGANÉS","LEÓN","LLEIDA","LOGROÑO","LUGO","MADRID","MAHÓN","MAJADAHONDA",
+  "MÁLAGA","MALLORCA","MANACOR","MARBELLA","MURCIA","OURENSE","OVIEDO","PALMA DE MALLORCA","PAMPLONA",
+  "PONTEVEDRA","POZUELO DE ALARCÓN","RUBÍ","SABADELL","SALAMANCA","SAN SEBASTIÁN","SAN SEBASTIÁN DE LOS REYES",
+  "SANT ANDREU","SANTANDER","SANTIAGO DE COMPOSTELA","SEGOVIA","SEVILLA","SORIA","TARRAGONA","TENERIFE",
+  "TOLEDO","TOMELLOSO","TORREJÓN DE ARDOZ","TORREVIEJA","VALENCIA","VALLADOLID","VALLECAS","VIGO","VITORIA","ZARAGOZA","OFICINA I"
+];
+const MESES_NOMBRE = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const USUARIOS = ["Gemma","Sebastian","Judith","Jaqueline","Lorena","Marcela","Alba","Claudia","Yenifer"];
+
+// Identificador de versión de este archivo. Súbelo cada vez que se reemplace index.html
+// para poder verificar de un vistazo que TODOS los usuarios están usando la misma copia
+// (si alguien queda con una versión vieja, sus guardados no tendrán las protecciones
+// más recientes contra pérdida de datos entre varios usuarios).
+const VERSION_APP = "1.6 · 20 jul 2026 (control de concurrencia + respaldos)";
+(function mostrarVersion(){
+  ['versionInfoLanding','versionInfoSidebar'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = 'Versión ' + VERSION_APP;
+  });
+})();
+
+/* ===================== Estado global ===================== */
+let rootHandle = null;
+let data = null;              // { facturas:[...], terceros:{...}, actualizado }
+let jsonFileName = "Datos.json";
+let filtered = [];
+let sortCol = null, sortDir = 1;
+let currentPage = 1, pageSize = 50;
+let filtros = { texto:"", mes:"", proveedor:"", centro:"", formaPago:"", estado:"", revisado:"", anticipo:"", inmov:"", tipoGasto:"" };
+let previewUrlActual = null;
+let editandoIdx = null;
+let usuarioActual = null;
+let ultimoModificadoDisco = null;  // fecha de modificación del Datos.json que tenemos cargado
+let sincronizando = false;
+let intervaloSync = null;
+
+/* ===================== Selección de usuario ===================== */
+function renderListaUsuarios(){
+  ['listaUsuarios','listaUsuariosModal'].forEach(id=>{
+    const cont = document.getElementById(id);
+    if(!cont) return;
+    cont.innerHTML = USUARIOS.map(u=>`<button type="button" class="chip-usuario${usuarioActual===u?' activo':''}" data-usuario="${escapeHtml(u)}">${escapeHtml(u)}</button>`).join('');
+    cont.querySelectorAll('[data-usuario]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        usuarioActual = btn.dataset.usuario;
+        try{ localStorage.setItem('facturas_usuarioActual', usuarioActual); }catch(e){}
+        renderListaUsuarios();
+        const btnSel = document.getElementById('btnSeleccionar');
+        if(btnSel) btnSel.disabled = false;
+        const label = document.getElementById('usuarioActualLabel');
+        if(label) label.textContent = usuarioActual;
+        if(id === 'listaUsuariosModal'){
+          toast('Usuario cambiado a ' + usuarioActual + '.');
+          cerrarModal('modalUsuario');
+        }
+      });
+    });
+  });
+}
+(function initUsuario(){
+  try{ usuarioActual = localStorage.getItem('facturas_usuarioActual') || null; }catch(e){ usuarioActual = null; }
+  renderListaUsuarios();
+  if(usuarioActual) document.getElementById('btnSeleccionar').disabled = false;
+})();
+document.getElementById('btnCambiarUsuario').addEventListener('click', ()=>{
+  renderListaUsuarios();
+  abrirModal('modalUsuario');
+});
+
+/* ===================== Utilidades ===================== */
+function toast(msg, isError){
+  const c = document.getElementById('toastCont');
+  const d = document.createElement('div');
+  d.className = 'toast' + (isError ? ' error' : '');
+  d.textContent = msg;
+  c.appendChild(d);
+  setTimeout(()=>d.remove(), 3500);
+}
+function normaliza(s){
+  return (s||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+}
+function parseFechaDDMMYYYY(s){
+  if(!s) return null;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s.trim());
+  if(!m) return null;
+  const dia = parseInt(m[1]), mes = parseInt(m[2]), anio = parseInt(m[3]);
+  const d = new Date(anio, mes-1, dia);
+  if(isNaN(d.getTime())) return null;
+  if(d.getDate() !== dia || d.getMonth() !== mes-1 || d.getFullYear() !== anio) return null; // rechaza fechas inválidas (ej. 31/02)
+  return d;
+}
+function fechaDDMMYYYYaISO(s){
+  const d = parseFechaDDMMYYYY(s);
+  if(!d) return "";
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function isoADDMMYYYY(iso){
+  if(!iso) return null;
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function fmtMoneda(v){
+  if(v===null||v===undefined||v==="") return "";
+  const n = Number(v);
+  if(isNaN(n)) return String(v);
+  return n.toLocaleString('es-ES',{style:'currency',currency:'EUR'});
+}
+function fmtPorcentaje(v){
+  if(v===null||v===undefined||v==="") return "";
+  return Number(v).toLocaleString('es-ES',{maximumFractionDigits:2}) + " %";
+}
+function escapeHtml(s){
+  return (s===null||s===undefined?"":String(s)).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+// Lee un campo probando varias claves posibles (compatibilidad con Datos.json antiguo y nuevo).
+function valorCampo(campos, claves){
+  if(!campos) return null;
+  for(const k of claves){
+    const v = campos[k];
+    if(v !== undefined && v !== null && v !== '') return v;
+  }
+  return null;
+}
+
+/* ===================== IndexedDB para recordar la carpeta ===================== */
+function idbGetStore(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open('facturas-app-db', 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore('handles');
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function idbGuardarHandle(handle){
+  try{
+    const db = await idbGetStore();
+    await new Promise((res,rej)=>{
+      const tx = db.transaction('handles','readwrite');
+      tx.objectStore('handles').put(handle, 'root');
+      tx.oncomplete = res; tx.onerror = ()=>rej(tx.error);
+    });
+  }catch(e){ /* silencioso */ }
+}
+async function idbLeerHandle(){
+  try{
+    const db = await idbGetStore();
+    return await new Promise((res)=>{
+      const tx = db.transaction('handles','readonly');
+      const r = tx.objectStore('handles').get('root');
+      r.onsuccess = ()=>res(r.result || null);
+      r.onerror = ()=>res(null);
+    });
+  }catch(e){ return null; }
+}
+
+/* ===================== Selección de carpeta ===================== */
+document.getElementById('btnSeleccionar').addEventListener('click', async ()=>{
+  await conectarCarpeta();
+});
+document.getElementById('btnRescan').addEventListener('click', async ()=>{
+  await escanearNuevos();
+});
+
+async function conectarCarpeta(){
+  const errBox = document.getElementById('landingError');
+  errBox.style.display = 'none';
+  if(!window.showDirectoryPicker){
+    errBox.style.display='block';
+    errBox.textContent = 'Tu navegador no soporta esta función. Usa Chrome o Edge de escritorio.';
+    return;
+  }
+  try{
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    rootHandle = handle;
+    await idbGuardarHandle(handle);
+    await cargarTodo();
+  }catch(e){
+    if(e.name !== 'AbortError'){
+      errBox.style.display='block';
+      errBox.textContent = 'No se pudo abrir la carpeta: ' + e.message;
+    }
+  }
+}
+
+async function intentarReconectarAutomatico(){
+  const handle = await idbLeerHandle();
+  if(!handle) return false;
+  try{
+    let permiso = await handle.queryPermission({mode:'readwrite'});
+    if(permiso !== 'granted'){
+      // No podemos pedir permiso sin gesto del usuario; mostramos landing con botón de reconexión rápida.
+      const btn = document.getElementById('btnSeleccionar');
+      btn.textContent = '📁 Reconectar carpeta';
+      btn.onclick = async ()=>{
+        try{
+          const p = await handle.requestPermission({mode:'readwrite'});
+          if(p === 'granted'){ rootHandle = handle; await cargarTodo(); }
+          else { await conectarCarpeta(); }
+        }catch(e){ await conectarCarpeta(); }
+      };
+      return false;
+    }
+    rootHandle = handle;
+    await cargarTodo();
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ===================== Carga de datos ===================== */
+async function obtenerArchivoJson(){
+  for(const nombre of ['Datos.json','datos.json']){
+    try{
+      const fh = await rootHandle.getFileHandle(nombre);
+      jsonFileName = nombre;
+      return fh;
+    }catch(e){ /* probar siguiente */ }
+  }
+  return null;
+}
+
+async function cargarTodo(){
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('app').classList.add('activo');
+  try{
+    const fh = await obtenerArchivoJson();
+    if(!fh){
+      toast('No se encontró Datos.json en la carpeta seleccionada.', true);
+      data = { facturas: [], terceros: {}, actualizado: new Date().toISOString() };
+    } else {
+      const file = await fh.getFile();
+      const texto = await file.text();
+      data = JSON.parse(texto);
+      if(!Array.isArray(data.facturas)) data.facturas = [];
+      if(!data.terceros) data.terceros = {};
+      ultimoModificadoDisco = file.lastModified;
+    }
+  }catch(e){
+    toast('Error leyendo Datos.json: ' + e.message, true);
+    data = { facturas: [], terceros: {}, actualizado: new Date().toISOString() };
+  }
+  seedCatalogos();
+
+  // Migración: si alguna factura no tiene todavía su número consecutivo (id), se asigna
+  // ahora, respetando el orden en que ya estaban en el archivo. Va dentro de
+  // guardarCambios() para que sea seguro aunque varios usuarios abran la app casi al
+  // mismo tiempo con el mismo archivo sin ids todavía.
+  if(data.facturas.some(f=> typeof f.id !== 'number')){
+    await guardarCambios((fresh)=>{ asignarIdsFaltantes(fresh); });
+  }
+
+  poblarCatalogos();
+  poblarFiltrosDinamicos();
+  aplicarFiltros();
+  renderSidebar();
+  await escanearNuevos(true);
+  iniciarSincronizacionAutomatica();
+}
+
+/* ===================== Sincronización en tiempo real entre usuarios ===================== */
+// Como varias personas pueden tener el visor abierto sobre la misma carpeta compartida,
+// revisamos periódicamente si Datos.json cambió en disco (por otro usuario) y, si es así,
+// recargamos y refrescamos la vista automáticamente. No interrumpe si hay un modal abierto
+// (edición en curso, archivos nuevos o configuración) para no perder lo que se está escribiendo.
+function hayModalAbierto(){
+  return document.getElementById('modalEditar').classList.contains('activo')
+      || document.getElementById('modalNuevos').classList.contains('activo')
+      || document.getElementById('modalConfig').classList.contains('activo')
+      || document.getElementById('modalUsuario').classList.contains('activo');
+}
+
+// Devuelve: el objeto de datos si se leyó y parseó bien; null si el archivo no existe;
+// undefined si existe pero no se pudo interpretar como JSON válido (p.ej. porque se está
+// escribiendo justo en este instante desde otra app, como un sincronizador de nube).
+async function leerDatosDelDisco(){
+  const fh = await obtenerArchivoJson();
+  if(!fh) return null;
+  const file = await fh.getFile();
+  const texto = await file.text();
+  let fresh;
+  try{ fresh = texto.trim() ? JSON.parse(texto) : {}; }
+  catch(e){ return undefined; }
+  if(!Array.isArray(fresh.facturas)) fresh.facturas = [];
+  if(!fresh.terceros) fresh.terceros = {};
+  return fresh;
+}
+
+// Igual que leerDatosDelDisco, pero reintenta unas veces si el archivo aparece corrupto
+// momentáneamente (típico si se lee justo cuando un sincronizador de nube -OneDrive, Google
+// Drive, Dropbox- está terminando de escribir una versión nueva). Nunca devuelve un dataset
+// vacío como sustituto: o trae datos reales, o informa null/undefined para que quien llama
+// decida qué hacer (nunca se debe asumir "vacío" por defecto).
+async function leerDatosDelDiscoConReintentos(intentos, esperaMs){
+  intentos = intentos || 4;
+  esperaMs = esperaMs || 350;
+  for(let i=0; i<intentos; i++){
+    const resultado = await leerDatosDelDisco();
+    if(resultado !== undefined) return resultado; // null (no existe) u objeto válido: no hace falta reintentar
+    if(i < intentos-1) await new Promise(r=>setTimeout(r, esperaMs));
+  }
+  return undefined;
+}
+
+async function verificarCambiosRemotos(){
+  if(!rootHandle || sincronizando || hayModalAbierto()) return;
+  sincronizando = true;
+  try{
+    const fh = await obtenerArchivoJson();
+    if(!fh){ sincronizando = false; return; }
+    const file = await fh.getFile();
+    if(ultimoModificadoDisco !== null && file.lastModified === ultimoModificadoDisco){
+      sincronizando = false; return; // nadie más ha guardado desde la última vez
+    }
+    const fresh = await leerDatosDelDiscoConReintentos();
+    if(!fresh){ sincronizando = false; return; } // no se pudo leer bien tras reintentos; se prueba de nuevo en el próximo ciclo
+    // Si lo que ya teníamos cargado tenía bastantes facturas y lo recién leído aparece
+    // vacío, es más probable que sea una lectura defectuosa que una limpieza real:
+    // se ignora este ciclo y se reintenta más adelante, sin pisar lo que tenemos.
+    if(Array.isArray(data && data.facturas) && data.facturas.length > 5 && fresh.facturas.length === 0){
+      sincronizando = false; return;
+    }
+    seedCatalogos(fresh);
+    data = fresh;
+    ultimoModificadoDisco = file.lastModified;
+    poblarCatalogos();
+    poblarFiltrosDinamicos();
+    aplicarFiltros();
+    renderSidebar();
+    toast('Datos actualizados: otro usuario guardó cambios.');
+  }catch(e){ /* fallo silencioso, se reintenta en el siguiente ciclo */ }
+  sincronizando = false;
+}
+
+function iniciarSincronizacionAutomatica(){
+  if(intervaloSync) clearInterval(intervaloSync);
+  intervaloSync = setInterval(verificarCambiosRemotos, 6000);
+}
+
+/* ===================== Escaneo de archivos nuevos ===================== */
+// Recorre recursivamente una carpeta de proveedor (puede tener subcarpetas) y
+// devuelve la lista de archivos con su ruta relativa (relPath) dentro de esa carpeta.
+async function recorrerCarpetaRecursivo(dirHandle, prefijo, resultado){
+  for await (const [nombre, entrada] of dirHandle.entries()){
+    const rel = prefijo ? (prefijo + '/' + nombre) : nombre;
+    if(entrada.kind === 'file'){
+      resultado.push({ relPath: rel, handle: entrada });
+    } else if(entrada.kind === 'directory'){
+      await recorrerCarpetaRecursivo(entrada, rel, resultado);
+    }
+  }
+}
+
+// Normaliza un nombre de archivo/carpeta para comparaciones tolerantes a diferencias
+// de normalización Unicode (NFC/NFD, típico en Mac), espacios extra o mayúsculas/minúsculas.
+function normalizaNombre(s){
+  return (s||'').toString().normalize('NFC').trim().replace(/\s+/g,' ').toLowerCase();
+}
+// Identificador estable de una factura dentro de Datos.json (no depende de su posición
+// en el array, que puede cambiar si otro usuario agrega o quita registros).
+function claveFactura(f){
+  return (f.proveedor||'') + '||' + (f.relPath || f.archivo || '');
+}
+
+// Formato visual del número consecutivo de factura, p.ej. 1 -> "F-00001".
+function fmtId(id){
+  if(id === null || id === undefined || id === '') return '';
+  return 'F-' + String(id).padStart(5, '0');
+}
+
+// Asigna un número consecutivo ("id") a las facturas que todavía no lo tengan, sin tocar
+// las que ya lo tienen. Las existentes conservan el orden en que ya estaban en el array;
+// las nuevas siguen el consecutivo a partir del id más alto que exista en ese momento.
+// Se usa tanto en la migración inicial como al agregar facturas nuevas, y siempre se
+// ejecuta dentro de guardarCambios() sobre la versión más reciente del archivo, para que
+// dos usuarios nunca terminen asignando el mismo número.
+function asignarIdsFaltantes(fresh){
+  let maxId = 0;
+  fresh.facturas.forEach(f=>{ if(typeof f.id === 'number' && f.id > maxId) maxId = f.id; });
+  let siguiente = maxId + 1;
+  let huboCambios = false;
+  fresh.facturas.forEach(f=>{
+    if(typeof f.id !== 'number'){
+      f.id = siguiente++;
+      huboCambios = true;
+    }
+  });
+  return huboCambios;
+}
+
+// Busca una entrada (archivo o carpeta) dentro de dirHandle por nombre. Primero intenta
+// el acceso directo (rápido); si falla (p.ej. por diferencias de normalización Unicode
+// entre el nombre guardado en Datos.json y el nombre real en disco), recorre las
+// entradas de la carpeta y compara de forma tolerante.
+async function obtenerHijoPorNombre(dirHandle, nombre, tipo){
+  try{
+    return (tipo === 'file') ? await dirHandle.getFileHandle(nombre) : await dirHandle.getDirectoryHandle(nombre);
+  }catch(e){
+    const objetivo = normalizaNombre(nombre);
+    for await (const [n, entrada] of dirHandle.entries()){
+      if(entrada.kind !== tipo) continue;
+      if(normalizaNombre(n) === objetivo) return entrada;
+    }
+    throw new Error(`No se encontró "${nombre}" en la carpeta "${dirHandle.name}".`);
+  }
+}
+
+// Navega desde la carpeta de un proveedor hasta un archivo indicado por su relPath
+// (puede incluir subcarpetas separadas por '/'). Tolera diferencias de nombre entre
+// lo guardado en Datos.json y lo que hay realmente en disco.
+async function resolverArchivo(proveedor, relPath){
+  let dir = await obtenerHijoPorNombre(rootHandle, proveedor, 'directory');
+  const partes = String(relPath).split('/');
+  for(let i=0; i<partes.length-1; i++){
+    dir = await obtenerHijoPorNombre(dir, partes[i], 'directory');
+  }
+  return await obtenerHijoPorNombre(dir, partes[partes.length-1], 'file');
+}
+
+async function escanearNuevos(silencioso){
+  if(!rootHandle) return;
+  const conocidos = new Set(data.facturas.map(f => normalizaNombre(f.proveedor||'') + '||' + normalizaNombre(f.relPath||f.archivo||'')));
+  const nuevos = [];
+  try{
+    for await (const [nombreCarpeta, entradaCarpeta] of rootHandle.entries()){
+      if(entradaCarpeta.kind !== 'directory') continue;
+      const archivosCarpeta = [];
+      await recorrerCarpetaRecursivo(entradaCarpeta, '', archivosCarpeta);
+      archivosCarpeta.forEach(a=>{
+        const key = normalizaNombre(nombreCarpeta) + '||' + normalizaNombre(a.relPath);
+        if(!conocidos.has(key)){
+          nuevos.push({ carpeta: nombreCarpeta, relPath: a.relPath, archivo: a.relPath.split('/').pop(), handleArchivo: a.handle });
+        }
+      });
+    }
+  }catch(e){
+    if(!silencioso) toast('Error escaneando la carpeta: ' + e.message, true);
+    return;
+  }
+
+  if(nuevos.length === 0){
+    if(!silencioso) toast('No se encontraron archivos nuevos.');
+    return;
+  }
+  mostrarModalNuevos(nuevos);
+}
+
+function mostrarModalNuevos(nuevos){
+  document.getElementById('cantidadNuevos').textContent = nuevos.length;
+  const cont = document.getElementById('listaNuevos');
+  cont.innerHTML = '';
+  nuevos.forEach((n, i)=>{
+    const div = document.createElement('div');
+    div.className = 'fila-nuevo';
+    div.innerHTML = `<input type="checkbox" checked data-idx="${i}"> <div><div>${escapeHtml(n.archivo)}</div><div class="carpeta">${escapeHtml(n.carpeta)}${n.relPath!==n.archivo ? ' / '+escapeHtml(n.relPath) : ''}</div></div>`;
+    cont.appendChild(div);
+  });
+  document.getElementById('modalNuevos')._nuevos = nuevos;
+  abrirModal('modalNuevos');
+}
+
+document.getElementById('btnIncluirNuevos').addEventListener('click', async ()=>{
+  const modal = document.getElementById('modalNuevos');
+  const nuevos = modal._nuevos || [];
+  const checks = modal.querySelectorAll('#listaNuevos input[type=checkbox]');
+  const seleccionados = [];
+  checks.forEach(chk=>{
+    if(chk.checked) seleccionados.push(nuevos[parseInt(chk.dataset.idx)]);
+  });
+  if(seleccionados.length === 0){ cerrarModal('modalNuevos'); return; }
+
+  const nuevasFacturas = [];
+  for(const n of seleccionados){
+    let file;
+    try{ file = await n.handleArchivo.getFile(); }catch(e){ continue; }
+    const tercero = data.terceros[n.carpeta];
+    nuevasFacturas.push({
+      proveedor: n.carpeta,
+      archivo: n.archivo,
+      relPath: n.relPath,
+      tamano: file.size,
+      modificado: file.lastModified,
+      campos: {
+        numero: null, fecha: null, base: null, iva: null, ivaPorcentaje: null,
+        total: null, formaPago: null, retencionTiene: false, retencionPorcentaje: null,
+        retencionValor: null, cif: tercero ? tercero.cif : null, "Descuento": null,
+        "Forma de Pago": null, "Concepto": null, "Coincide Valores": false,
+        "Centro de Costos": null, "Anticipo": "No", "Tipo de Gasto": null, activoFijo: "No"
+      },
+      texto: "",
+      revisado: false,
+      estado: "pendiente"
+    });
+  }
+  // Se fusiona contra la versión más reciente del archivo, evitando duplicar si otro
+  // usuario ya agregó alguno de estos mismos archivos mientras se revisaba este modal.
+  const ok = await guardarCambios((fresh)=>{
+    const conocidosFrescos = new Set(fresh.facturas.map(f => normalizaNombre(f.proveedor||'') + '||' + normalizaNombre(f.relPath||f.archivo||'')));
+    nuevasFacturas.forEach(nf=>{
+      const key = normalizaNombre(nf.proveedor) + '||' + normalizaNombre(nf.relPath);
+      if(!conocidosFrescos.has(key)) fresh.facturas.push(nf);
+    });
+    asignarIdsFaltantes(fresh); // les da su número consecutivo a las que se acaban de agregar
+  });
+  if(ok) toast(`${nuevasFacturas.length} factura(s) añadidas.`);
+  cerrarModal('modalNuevos');
+  poblarFiltrosDinamicos();
+  aplicarFiltros();
+  renderSidebar();
+});
+
+/* ===================== Auditoría de cambios ===================== */
+function registrarAuditoria(factura){
+  factura.modificadoPor = usuarioActual || 'Desconocido';
+  factura.modificadoFecha = new Date().toISOString();
+}
+
+/* ===================== Respaldos automáticos ===================== */
+// Antes de aplicar cualquier cambio, se guarda una copia de la última versión conocida
+// (Datos.backup.json) y, una vez al día, una copia fechada dentro de "_backups_datos".
+// Esto da una red de seguridad independiente de guardarCambios: si algo saliera mal en el
+// futuro, siempre hay de dónde recuperar. Los fallos aquí son avisos, no bloquean el guardado.
+async function crearRespaldos(freshAntesDeGuardar){
+  try{
+    const fhBackup = await rootHandle.getFileHandle('Datos.backup.json', {create:true});
+    const wBackup = await fhBackup.createWritable();
+    await wBackup.write(JSON.stringify(freshAntesDeGuardar, null, 2));
+    await wBackup.close();
+  }catch(e){ console.warn('No se pudo crear el respaldo rápido (Datos.backup.json):', e); }
+
+  try{
+    const dirBackups = await rootHandle.getDirectoryHandle('_backups_datos', {create:true});
+    const hoy = new Date();
+    const pad = n=>String(n).padStart(2,'0');
+    const nombreHoy = `Datos_${hoy.getFullYear()}-${pad(hoy.getMonth()+1)}-${pad(hoy.getDate())}.json`;
+    let yaExiste = false;
+    try{ await dirBackups.getFileHandle(nombreHoy); yaExiste = true; }catch(e){ /* aún no existe, se crea abajo */ }
+    if(!yaExiste){
+      const fhDia = await dirBackups.getFileHandle(nombreHoy, {create:true});
+      const wDia = await fhDia.createWritable();
+      await wDia.write(JSON.stringify(freshAntesDeGuardar, null, 2));
+      await wDia.close();
+      // Limpieza: conservar solo los últimos 30 respaldos diarios para no acumular indefinidamente.
+      const nombres = [];
+      for await (const [nombre, entrada] of dirBackups.entries()){
+        if(entrada.kind === 'file' && nombre.startsWith('Datos_')) nombres.push(nombre);
+      }
+      nombres.sort();
+      const sobrantes = nombres.length - 30;
+      for(let i=0; i<sobrantes; i++){
+        try{ await dirBackups.removeEntry(nombres[i]); }catch(e){ /* no crítico */ }
+      }
+    }
+  }catch(e){ console.warn('No se pudo crear el respaldo diario (_backups_datos):', e); }
+}
+
+/* ===================== Guardado (lectura-fusión-escritura, con control de concurrencia) ===================== */
+// Con varios usuarios guardando "al mismo tiempo" sobre el mismo archivo en un disco de
+// red, el peligro real es este: dos personas leen el archivo casi al mismo instante,
+// cada una aplica su cambio sobre SU copia en memoria, y la segunda en escribir pisa a la
+// primera sin darse cuenta (el cambio de la primera desaparece aunque nadie cometió
+// ningún error). Para evitarlo, justo ANTES de escribir se vuelve a comprobar la fecha de
+// modificación del archivo en disco: si cambió desde que la leímos (porque alguien más
+// acaba de guardar), NO escribimos encima; se relee todo desde cero y se reintenta.
+async function guardarCambios(mutador){
+  if(!rootHandle) return false;
+  const INTENTOS_MAX = 8;
+
+  for(let intento=0; intento<INTENTOS_MAX; intento++){
+    let fh;
+    try{ fh = await obtenerArchivoJson(); }catch(e){ fh = null; }
+
+    let fresh, mtimeLeido;
+    if(!fh){
+      const crear = window.confirm('No se encontró Datos.json en la carpeta seleccionada. ¿Quieres crear uno nuevo (vacío)?');
+      if(!crear) return false;
+      fresh = { facturas: [], terceros: {} };
+      mtimeLeido = null; // no había archivo todavía
+    } else {
+      try{
+        fresh = await leerDatosDelDiscoConReintentos();
+      }catch(e){
+        toast('No se pudo leer Datos.json antes de guardar: ' + e.message + '. No se guardó nada.', true);
+        return false;
+      }
+      if(fresh === undefined){
+        // El archivo existe pero no se pudo interpretar como JSON tras varios intentos.
+        // NUNCA se sustituye por un dataset vacío: eso borraría todo. Se aborta el guardado.
+        toast('Datos.json no se pudo leer correctamente (puede estar siendo escrito por otro proceso justo ahora). No se guardó nada para evitar pérdida de datos. Intenta de nuevo en unos segundos.', true);
+        return false;
+      }
+      const fileLeido = await fh.getFile();
+      mtimeLeido = fileLeido.lastModified;
+    }
+
+    // Red de seguridad: si lo que tenemos cargado en memoria tiene bastantes facturas y lo
+    // que se acaba de leer del disco aparece vacío, algo no cuadra — se aborta en lugar de
+    // arriesgarse a sobrescribir.
+    if(Array.isArray(data && data.facturas) && data.facturas.length > 5 && fresh.facturas.length === 0){
+      toast('Aviso: Datos.json se leyó vacío justo ahora, pero antes tenía facturas. Por seguridad no se guardó nada. Intenta de nuevo.', true);
+      return false;
+    }
+
+    seedCatalogos(fresh);
+    mutador(fresh);
+    fresh.actualizado = new Date().toISOString();
+    const facturasEsperadas = fresh.facturas.length;
+    const contenidoNuevo = JSON.stringify(fresh, null, 2);
+
+    try{
+      // Justo antes de escribir: ¿sigue el archivo tal como lo leímos, o alguien más
+      // guardó algo en el rato que tardamos en preparar nuestro cambio?
+      const fhComprobar = await rootHandle.getFileHandle(jsonFileName, {create:true});
+      const fileComprobar = await fhComprobar.getFile();
+      if(mtimeLeido !== null && fileComprobar.lastModified !== mtimeLeido){
+        // Otro usuario guardó justo en este momento: no escribimos encima de su cambio.
+        // Esperamos un instante (aleatorio, para no chocar de nuevo con la misma persona)
+        // y reintentamos desde cero, releyendo la versión más reciente.
+        await new Promise(r=>setTimeout(r, 150 + Math.random()*350));
+        continue;
+      }
+
+      // Respaldo de la versión conocida-buena, justo antes de reemplazarla.
+      await crearRespaldos(fresh);
+
+      const writable = await fhComprobar.createWritable();
+      await writable.write(contenidoNuevo);
+      await writable.close();
+      data = fresh;
+
+      // Verificación posterior: releemos lo que quedó realmente en disco.
+      try{
+        const fhVerif = await rootHandle.getFileHandle(jsonFileName);
+        const fileVerif = await fhVerif.getFile();
+        ultimoModificadoDisco = fileVerif.lastModified;
+        const textoVerif = await fileVerif.text();
+        const verificado = JSON.parse(textoVerif);
+        if(!Array.isArray(verificado.facturas) || verificado.facturas.length !== facturasEsperadas){
+          toast('Aviso: el archivo guardado no quedó como se esperaba. Revisa Datos.json; hay copias de respaldo en Datos.backup.json y en la carpeta _backups_datos.', true);
+        }
+      }catch(e){
+        toast('Aviso: no se pudo verificar que el guardado quedara correcto. Revisa Datos.json.', true);
+      }
+      return true;
+    }catch(e){
+      toast('Error guardando Datos.json: ' + e.message, true);
+      return false;
+    }
+  }
+
+  toast('No se pudo guardar: hay demasiada actividad simultánea de otros usuarios en este momento. Intenta de nuevo.', true);
+  return false;
+}
+
+/* ===================== Sidebar meses ===================== */
+function renderSidebar(){
+  const resumen = document.getElementById('resumenLateral');
+  resumen.textContent = `${data.facturas.length} facturas · ${Object.keys(data.terceros).length} proveedores`;
+  const labelUsuario = document.getElementById('usuarioActualLabel');
+  if(labelUsuario) labelUsuario.textContent = usuarioActual || '-';
+
+  const conteo = {}; // 'YYYY-MM' -> count
+  let sinFecha = 0;
+  data.facturas.forEach(f=>{
+    const d = parseFechaDDMMYYYY(f.campos && f.campos.fecha);
+    if(!d){ sinFecha++; return; }
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    conteo[key] = (conteo[key]||0) + 1;
+  });
+  const claves = Object.keys(conteo).sort().reverse();
+  const cont = document.getElementById('listaMeses');
+  cont.innerHTML = '';
+  claves.forEach(key=>{
+    const [y,m] = key.split('-');
+    const nombre = `${MESES_NOMBRE[parseInt(m)-1]} ${y}`;
+    const div = document.createElement('div');
+    div.className = 'mes-item' + (filtros.mes === key ? ' activo' : '');
+    div.innerHTML = `<span>${nombre}</span><span class="badge-count">${conteo[key]}</span>`;
+    div.addEventListener('click', ()=>{
+      filtros.mes = (filtros.mes === key) ? '' : key;
+      currentPage = 1;
+      aplicarFiltros();
+      renderSidebar();
+    });
+    cont.appendChild(div);
+  });
+  if(sinFecha > 0){
+    const div = document.createElement('div');
+    div.className = 'mes-item' + (filtros.mes === 'sin-fecha' ? ' activo' : '');
+    div.innerHTML = `<span>Sin fecha</span><span class="badge-count">${sinFecha}</span>`;
+    div.addEventListener('click', ()=>{
+      filtros.mes = (filtros.mes === 'sin-fecha') ? '' : 'sin-fecha';
+      currentPage = 1;
+      aplicarFiltros();
+      renderSidebar();
+    });
+    cont.appendChild(div);
+  }
+}
+document.getElementById('btnLimpiarMes').addEventListener('click', ()=>{
+  filtros.mes = '';
+  currentPage = 1;
+  aplicarFiltros();
+  renderSidebar();
+});
+
+/* ===================== Filtros dinámicos (dropdowns) ===================== */
+function poblarFiltrosDinamicos(){
+  const proveedores = [...new Set(data.facturas.map(f=>f.proveedor).filter(Boolean))].sort();
+  const centros = [...new Set(data.facturas.map(f=>valorCampo(f.campos, ['Centro de Costos','centroCosto'])).filter(Boolean))].sort();
+  const formasPago = [...new Set(data.facturas.map(f=>valorCampo(f.campos, ['Forma de Pago','formaPago'])).filter(Boolean))].sort();
+
+  llenarSelect('fProveedor', proveedores, 'Proveedor: todos');
+  llenarSelect('fCentro', centros, 'Centro de costos: todos');
+  llenarSelect('fFormaPago', formasPago, 'Forma de pago: todas');
+}
+function llenarSelect(id, valores, placeholder){
+  const sel = document.getElementById(id);
+  const actual = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` + valores.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  sel.value = actual;
+}
+
+/* ===================== Catálogos configurables (persistidos en Datos.json) ===================== */
+// Definición de cada catálogo editable: sus valores por defecto (semilla) y, si aplica,
+// la(s) clave(s) del campo de la factura donde se usa ese valor (para poder propagar renombres).
+const DEFS_CATALOGOS = {
+  tipoGasto:  { defaults: TIPO_GASTO_OPTIONS,   clavesFactura: ['Tipo de Gasto'] },
+  formaPago:  { defaults: FORMA_PAGO_OPTIONS,   clavesFactura: ['Forma de Pago','formaPago'] },
+  centroCosto:{ defaults: CENTRO_COSTO_OPTIONS, clavesFactura: ['Centro de Costos','centroCosto'] }
+};
+function seedCatalogos(target){
+  target = target || data;
+  if(!target.catalogos || typeof target.catalogos !== 'object') target.catalogos = {};
+  Object.keys(DEFS_CATALOGOS).forEach(clave=>{
+    if(!Array.isArray(target.catalogos[clave])){
+      target.catalogos[clave] = [...DEFS_CATALOGOS[clave].defaults];
+    }
+  });
+}
+function poblarCatalogos(){
+  const formaPago = data.catalogos.formaPago;
+  const centroCosto = data.catalogos.centroCosto;
+  const tipoGasto = data.catalogos.tipoGasto;
+  document.getElementById('dl_formaPago').innerHTML = formaPago.map(v=>`<option value="${escapeHtml(v)}">`).join('');
+  document.getElementById('dl_centroCosto').innerHTML = centroCosto.map(v=>`<option value="${escapeHtml(v)}">`).join('');
+  const opcionesTipoGasto = '<option value="">Selecciona...</option>' + tipoGasto.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  document.getElementById('c_tipoGasto').innerHTML = opcionesTipoGasto;
+  llenarSelect('fTipoGasto', tipoGasto, 'Tipo de gasto: todos');
+}
+
+function renderConfig(){
+  Object.keys(DEFS_CATALOGOS).forEach(clave=>{
+    const cont = document.getElementById('configLista_' + clave);
+    const valores = data.catalogos[clave] || [];
+    cont.innerHTML = valores.map((v,i)=>`
+      <div class="config-item">
+        <span title="${escapeHtml(v)}">${escapeHtml(v)}</span>
+        <button type="button" class="editar" data-cat="${clave}" data-idx="${i}" title="Renombrar">✎</button>
+        <button type="button" class="eliminar" data-cat="${clave}" data-idx="${i}" title="Eliminar">✕</button>
+      </div>
+    `).join('') || '<div style="font-size:12px;color:var(--gris-500);padding:6px 0;">Sin elementos.</div>';
+  });
+  document.querySelectorAll('.config-lista button.editar').forEach(btn=>{
+    btn.addEventListener('click', ()=> renombrarCatalogoItem(btn.dataset.cat, parseInt(btn.dataset.idx)));
+  });
+  document.querySelectorAll('.config-lista button.eliminar').forEach(btn=>{
+    btn.addEventListener('click', ()=> eliminarCatalogoItem(btn.dataset.cat, parseInt(btn.dataset.idx)));
+  });
+}
+
+function refrescarTrasCatalogos(){
+  poblarCatalogos();
+  poblarFiltrosDinamicos();
+  aplicarFiltros();
+  renderConfig();
+}
+
+async function agregarCatalogoItem(clave){
+  const input = document.getElementById('configNuevo_' + clave);
+  const valor = input.value.trim();
+  if(!valor) return;
+  const yaExiste = data.catalogos[clave].some(v=>normalizaNombre(v) === normalizaNombre(valor));
+  if(yaExiste){ toast('Esa opción ya existe.', true); return; }
+  const ok = await guardarCambios((fresh)=>{
+    const lista = fresh.catalogos[clave];
+    if(!lista.some(v=>normalizaNombre(v) === normalizaNombre(valor))){
+      lista.push(valor); // se agrega al final para respetar el orden manual de la lista
+    }
+  });
+  input.value = '';
+  refrescarTrasCatalogos();
+  if(ok) toast('Categoría agregada.');
+}
+
+async function renombrarCatalogoItem(clave, idx){
+  const lista = data.catalogos[clave];
+  const valorViejo = lista[idx];
+  const valorNuevo = window.prompt('Nuevo nombre para "' + valorViejo + '":', valorViejo);
+  if(valorNuevo === null) return;
+  const limpio = valorNuevo.trim();
+  if(!limpio || limpio === valorViejo) return;
+  const duplicado = lista.some((v,i)=> i!==idx && normalizaNombre(v) === normalizaNombre(limpio));
+  if(duplicado){ toast('Ya existe una opción con ese nombre.', true); return; }
+
+  const clavesFactura = DEFS_CATALOGOS[clave].clavesFactura;
+  const enUso = data.facturas.filter(f=> clavesFactura.some(k=> f.campos && f.campos[k] === valorViejo));
+  let propagar = false;
+  if(enUso.length > 0){
+    propagar = window.confirm(`${enUso.length} factura(s) usan actualmente "${valorViejo}". ¿Quieres actualizarlas para que usen el nuevo nombre "${limpio}"?`);
+  }
+
+  const ok = await guardarCambios((fresh)=>{
+    const listaFresca = fresh.catalogos[clave];
+    const i = listaFresca.findIndex(v=> normalizaNombre(v) === normalizaNombre(valorViejo));
+    // se renombra en el mismo lugar de la lista (sin reordenar) para respetar el orden manual
+    if(i>=0) listaFresca[i] = limpio; else listaFresca.push(limpio);
+    if(propagar){
+      fresh.facturas.forEach(f=>{
+        clavesFactura.forEach(k=>{
+          if(f.campos && f.campos[k] === valorViejo) f.campos[k] = limpio;
+        });
+      });
+    }
+  });
+  refrescarTrasCatalogos();
+  renderSidebar();
+  if(ok) toast('Categoría renombrada.');
+}
+
+async function eliminarCatalogoItem(clave, idx){
+  const lista = data.catalogos[clave];
+  const valor = lista[idx];
+  const clavesFactura = DEFS_CATALOGOS[clave].clavesFactura;
+  const enUso = data.facturas.filter(f=> clavesFactura.some(k=> f.campos && f.campos[k] === valor)).length;
+  const aviso = enUso > 0
+    ? `"${valor}" está siendo usado en ${enUso} factura(s). Esas facturas conservarán el valor guardado, pero la opción ya no aparecerá en la lista para elegir. ¿Eliminar de todas formas?`
+    : `¿Eliminar "${valor}" del catálogo?`;
+  if(!window.confirm(aviso)) return;
+  const ok = await guardarCambios((fresh)=>{
+    const listaFresca = fresh.catalogos[clave];
+    const i = listaFresca.findIndex(v=> normalizaNombre(v) === normalizaNombre(valor));
+    if(i>=0) listaFresca.splice(i, 1);
+  });
+  refrescarTrasCatalogos();
+  if(ok) toast('Categoría eliminada.');
+}
+
+document.getElementById('btnConfiguracion').addEventListener('click', ()=>{
+  renderConfig();
+  abrirModal('modalConfig');
+});
+document.querySelectorAll('[data-agregar]').forEach(btn=>{
+  btn.addEventListener('click', ()=> agregarCatalogoItem(btn.dataset.agregar));
+});
+['tipoGasto','formaPago','centroCosto'].forEach(clave=>{
+  document.getElementById('configNuevo_' + clave).addEventListener('keydown', (ev)=>{
+    if(ev.key === 'Enter'){ ev.preventDefault(); agregarCatalogoItem(clave); }
+  });
+});
+
+const idsFiltro = { buscador:'texto', fProveedor:'proveedor', fCentro:'centro', fFormaPago:'formaPago',
+  fEstado:'estado', fRevisado:'revisado', fAnticipo:'anticipo', fInmov:'inmov', fTipoGasto:'tipoGasto' };
+Object.keys(idsFiltro).forEach(id=>{
+  const el = document.getElementById(id);
+  const ev = (el.tagName === 'SELECT') ? 'change' : 'input';
+  el.addEventListener(ev, ()=>{
+    filtros[idsFiltro[id]] = el.value;
+    currentPage = 1;
+    aplicarFiltros();
+  });
+});
+document.getElementById('btnLimpiarFiltros').addEventListener('click', ()=>{
+  filtros = { texto:"", mes:filtros.mes, proveedor:"", centro:"", formaPago:"", estado:"", revisado:"", anticipo:"", inmov:"", tipoGasto:"" };
+  document.getElementById('buscador').value = '';
+  ['fProveedor','fCentro','fFormaPago','fEstado','fRevisado','fAnticipo','fInmov','fTipoGasto'].forEach(id=>document.getElementById(id).value='');
+  currentPage = 1;
+  aplicarFiltros();
+});
+document.getElementById('pageSize').addEventListener('change', (e)=>{
+  pageSize = parseInt(e.target.value);
+  currentPage = 1;
+  renderTabla();
+});
+
+/* ===================== Filtro + orden ===================== */
+function aplicarFiltros(){
+  const t = normaliza(filtros.texto);
+  filtered = data.facturas.filter(f=>{
+    const c = f.campos || {};
+    if(filtros.mes){
+      const d = parseFechaDDMMYYYY(c.fecha);
+      if(filtros.mes === 'sin-fecha'){ if(d) return false; }
+      else{
+        if(!d) return false;
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        if(key !== filtros.mes) return false;
+      }
+    }
+    const centroCosto = valorCampo(c, ['Centro de Costos','centroCosto']);
+    const formaPago = valorCampo(c, ['Forma de Pago','formaPago']);
+    const anticipo = valorCampo(c, ['Anticipo','anticipo']);
+    const concepto = valorCampo(c, ['Concepto','concepto']);
+    const tipoGasto = valorCampo(c, ['Tipo de Gasto']);
+    if(filtros.proveedor && f.proveedor !== filtros.proveedor) return false;
+    if(filtros.centro && centroCosto !== filtros.centro) return false;
+    if(filtros.formaPago && formaPago !== filtros.formaPago) return false;
+    if(filtros.estado && f.estado !== filtros.estado) return false;
+    if(filtros.revisado === 'si' && !f.revisado) return false;
+    if(filtros.revisado === 'no' && f.revisado) return false;
+    if(filtros.anticipo && anticipo !== filtros.anticipo) return false;
+    if(filtros.inmov && c.activoFijo !== filtros.inmov) return false;
+    if(filtros.tipoGasto && tipoGasto !== filtros.tipoGasto) return false;
+    if(t){
+      const campo = [fmtId(f.id), f.proveedor, c.cif, c.numero, concepto, f.archivo].map(normaliza).join(' ');
+      if(!campo.includes(t)) return false;
+    }
+    return true;
+  });
+  if(sortCol) ordenarFiltrado();
+  renderTabla();
+}
+
+const COLUMNAS = [
+  {id:'idFactura', label:'ID', get:f=>f.id, tipo:'num'},
+  {id:'proveedor', label:'Proveedor', get:f=>f.proveedor, tipo:'str'},
+  {id:'cif', label:'CIF/NIF', get:f=>f.campos.cif, tipo:'str'},
+  {id:'numero', label:'No. Factura', get:f=>f.campos.numero, tipo:'str'},
+  {id:'fecha', label:'Fecha Factura', get:f=>f.campos.fecha, tipo:'fecha'},
+  {id:'base', label:'Base Imponible', get:f=>f.campos.base, tipo:'num'},
+  {id:'iva', label:'IVA', get:f=>f.campos.iva, tipo:'num'},
+  {id:'ivaPorcentaje', label:'% IVA', get:f=>f.campos.ivaPorcentaje, tipo:'num'},
+  {id:'total', label:'Total', get:f=>f.campos.total, tipo:'num'},
+  {id:'descuento', label:'Descuento', get:f=>valorCampo(f.campos, ['Descuento','descuento']), tipo:'num'},
+  {id:'formaPago', label:'Forma de Pago', get:f=>valorCampo(f.campos, ['Forma de Pago','formaPago']), tipo:'str'},
+  {id:'retencionPorcentaje', label:'% Rte', get:f=>f.campos.retencionPorcentaje, tipo:'num'},
+  {id:'retencionValor', label:'Valor Retención', get:f=>f.campos.retencionValor, tipo:'num'},
+  {id:'concepto', label:'Concepto', get:f=>valorCampo(f.campos, ['Concepto','concepto']), tipo:'str'},
+  {id:'centroCosto', label:'Centro de Costos', get:f=>valorCampo(f.campos, ['Centro de Costos','centroCosto']), tipo:'str'},
+  {id:'anticipo', label:'Anticipo', get:f=>valorCampo(f.campos, ['Anticipo','anticipo']), tipo:'str'},
+  {id:'activoFijo', label:'Inmovilizado', get:f=>f.campos.activoFijo, tipo:'str'},
+  {id:'tipoGasto', label:'Tipo de Gasto', get:f=>valorCampo(f.campos, ['Tipo de Gasto']), tipo:'str'},
+  {id:'archivo', label:'Fichero', get:f=>f.archivo, tipo:'str'},
+];
+
+function ordenarFiltrado(){
+  const col = COLUMNAS.find(c=>c.id===sortCol);
+  if(!col) return;
+  filtered.sort((a,b)=>{
+    let va = col.get(a), vb = col.get(b);
+    if(col.tipo === 'fecha'){
+      va = parseFechaDDMMYYYY(va); vb = parseFechaDDMMYYYY(vb);
+      va = va ? va.getTime() : -Infinity; vb = vb ? vb.getTime() : -Infinity;
+    } else if(col.tipo === 'num'){
+      va = (va===null||va===undefined||va==='') ? -Infinity : Number(va);
+      vb = (vb===null||vb===undefined||vb==='') ? -Infinity : Number(vb);
+    } else {
+      va = normaliza(va); vb = normaliza(vb);
+    }
+    if(va < vb) return -1*sortDir;
+    if(va > vb) return 1*sortDir;
+    return 0;
+  });
+}
+
+/* ===================== Render tabla ===================== */
+function renderCabecera(){
+  const tr = document.getElementById('filaCabecera');
+  tr.innerHTML = COLUMNAS.map(c=>{
+    const activo = sortCol === c.id;
+    const flecha = activo ? (sortDir===1?'▲':'▼') : '↕';
+    return `<th data-col="${c.id}" class="${activo?'activo':''}">${c.label} <span class="arrow">${flecha}</span></th>`;
+  }).join('') + '<th>Acciones</th>';
+  tr.querySelectorAll('th[data-col]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const col = th.dataset.col;
+      if(sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+      ordenarFiltrado();
+      renderCabecera();
+      renderTabla();
+    });
+  });
+}
+
+function renderTabla(){
+  renderCabecera();
+  const total = filtered.length;
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
+  if(currentPage > totalPaginas) currentPage = totalPaginas;
+  const inicio = (currentPage-1)*pageSize;
+  const pagina = filtered.slice(inicio, inicio+pageSize);
+
+  document.getElementById('infoResultados').textContent =
+    total === 0 ? 'Sin resultados' : `Mostrando ${inicio+1}-${Math.min(inicio+pageSize,total)} de ${total} facturas`;
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  pagina.forEach(f=>{
+    const c = f.campos || {};
+    const idxReal = data.facturas.indexOf(f);
+    const tr = document.createElement('tr');
+    if(f.estado === 'pendiente') tr.className = 'pendiente';
+    const formaPago = valorCampo(c, ['Forma de Pago','formaPago']);
+    const concepto = valorCampo(c, ['Concepto','concepto']);
+    const centroCosto = valorCampo(c, ['Centro de Costos','centroCosto']);
+    const anticipo = valorCampo(c, ['Anticipo','anticipo']);
+    const tipoGasto = valorCampo(c, ['Tipo de Gasto']);
+    const descuento = valorCampo(c, ['Descuento','descuento']);
+    const tags = [];
+    if(anticipo === 'Sí') tags.push('<span class="tag tag-anticipo">Anticipo</span>');
+    if(c.activoFijo === 'Sí') tags.push('<span class="tag tag-inmov">Inmovilizado</span>');
+    tr.innerHTML = `
+      <td class="num" style="font-weight:600;color:var(--azul-vivo);">${escapeHtml(fmtId(f.id))}</td>
+      <td>${escapeHtml(f.proveedor)}</td>
+      <td>${escapeHtml(c.cif)}</td>
+      <td>${escapeHtml(c.numero)}</td>
+      <td>${escapeHtml(c.fecha)}</td>
+      <td class="num">${fmtMoneda(c.base)}</td>
+      <td class="num">${fmtMoneda(c.iva)}</td>
+      <td class="num">${fmtPorcentaje(c.ivaPorcentaje)}</td>
+      <td class="num">${fmtMoneda(c.total)}</td>
+      <td class="num">${fmtMoneda(descuento)}</td>
+      <td>${escapeHtml(formaPago)}</td>
+      <td class="num">${fmtPorcentaje(c.retencionPorcentaje)}</td>
+      <td class="num">${fmtMoneda(c.retencionValor)}</td>
+      <td>${escapeHtml(concepto)}</td>
+      <td>${escapeHtml(centroCosto)}<div class="tag-row">${tags.join('')}</div></td>
+      <td>${escapeHtml(anticipo)}</td>
+      <td>${escapeHtml(c.activoFijo)}</td>
+      <td>${escapeHtml(tipoGasto)}</td>
+      <td><span class="dot ${f.estado==='ok'?'dot-ok':'dot-pend'}"></span><span class="archivo-cell" title="${escapeHtml(f.archivo)}">${escapeHtml(f.archivo)}</span></td>
+      <td class="acciones">
+        <button class="btn-icon" data-editar="${idxReal}">✏️ Editar</button>
+        <input type="checkbox" class="chk-revisado" data-revisar="${idxReal}" ${f.revisado?'checked':''} title="Marcar como revisada">
+      </td>
+    `;
+    tr.dataset.fila = idxReal;
+    tr.addEventListener('click', ()=> abrirEditor(idxReal));
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('[data-editar]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      abrirEditor(parseInt(btn.dataset.editar));
+    });
+  });
+  tbody.querySelectorAll('[data-revisar]').forEach(chk=>{
+    chk.addEventListener('click', ev=> ev.stopPropagation());
+    chk.addEventListener('change', async ()=>{
+      const idx = parseInt(chk.dataset.revisar);
+      const objetivo = data.facturas[idx];
+      const clave = claveFactura(objetivo);
+      const nuevoValor = chk.checked;
+      const usuario = usuarioActual || 'Desconocido';
+      const ok = await guardarCambios((fresh)=>{
+        const ff = fresh.facturas.find(x=> claveFactura(x) === clave);
+        if(ff){ ff.revisado = nuevoValor; ff.modificadoPor = usuario; ff.modificadoFecha = new Date().toISOString(); }
+      });
+      if(ok) toast('Estado de revisión actualizado.');
+      poblarFiltrosDinamicos();
+      aplicarFiltros();
+      renderSidebar();
+    });
+  });
+
+  renderPaginacion(totalPaginas);
+}
+
+function renderPaginacion(totalPaginas){
+  const cont = document.getElementById('paginacion');
+  cont.innerHTML = `
+    <button id="pgPrev" ${currentPage<=1?'disabled':''}>‹ Anterior</button>
+    <span>Página ${currentPage} de ${totalPaginas}</span>
+    <button id="pgNext" ${currentPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+  `;
+  document.getElementById('pgPrev').addEventListener('click', ()=>{ currentPage--; renderTabla(); });
+  document.getElementById('pgNext').addEventListener('click', ()=>{ currentPage++; renderTabla(); });
+}
+
+/* ===================== Modal genérico ===================== */
+function abrirModal(id){ document.getElementById(id).classList.add('activo'); }
+function cerrarModal(id){ document.getElementById(id).classList.remove('activo'); }
+document.querySelectorAll('[data-cerrar]').forEach(btn=>{
+  btn.addEventListener('click', ()=> cerrarModal(btn.dataset.cerrar));
+});
+
+/* ===================== Editor de factura ===================== */
+async function abrirEditor(idx){
+  editandoIdx = idx;
+  const f = data.facturas[idx];
+  const c = f.campos || {};
+
+  document.getElementById('tituloEditar').textContent = `Editar factura ${fmtId(f.id)} · ${f.proveedor}`;
+  const infoMod = document.getElementById('ultimaModificacion');
+  if(f.modificadoPor){
+    const fechaMod = new Date(f.modificadoFecha);
+    const fechaTxt = isNaN(fechaMod.getTime()) ? '' : fechaMod.toLocaleString('es-ES');
+    infoMod.textContent = `Última modificación: ${f.modificadoPor}${fechaTxt ? ' · ' + fechaTxt : ''}`;
+  } else {
+    infoMod.textContent = 'Sin modificaciones registradas.';
+  }
+  document.getElementById('c_proveedor').value = f.proveedor || '';
+  document.getElementById('c_cif').value = c.cif || '';
+  document.getElementById('c_numero').value = c.numero || '';
+  document.getElementById('c_fecha').value = fechaDDMMYYYYaISO(c.fecha);
+  document.getElementById('c_base').value = c.base ?? '';
+  document.getElementById('c_iva').value = c.iva ?? '';
+  document.getElementById('c_ivaPorcentaje').value = c.ivaPorcentaje ?? '';
+  document.getElementById('c_total').value = c.total ?? '';
+  document.getElementById('c_retencionPorcentaje').value = c.retencionPorcentaje ?? '';
+  document.getElementById('c_retencionValor').value = c.retencionValor ?? '';
+  document.getElementById('c_descuento').value = valorCampo(c, ['Descuento','descuento']) ?? '';
+  document.getElementById('c_formaPago').value = valorCampo(c, ['Forma de Pago','formaPago']) || '';
+  document.getElementById('c_concepto').value = valorCampo(c, ['Concepto','concepto']) || '';
+  document.getElementById('c_centroCosto').value = valorCampo(c, ['Centro de Costos','centroCosto']) || '';
+  document.getElementById('c_tipoGasto').value = valorCampo(c, ['Tipo de Gasto']) || '';
+  document.getElementById('c_activoFijo').value = (c.activoFijo === 'Sí') ? 'Sí' : 'No';
+  document.getElementById('c_anticipo').value = (valorCampo(c, ['Anticipo','anticipo']) === 'Sí') ? 'Sí' : 'No';
+  document.getElementById('c_archivo').value = f.archivo || '';
+  document.getElementById('c_revisado').checked = !!f.revisado;
+
+  actualizarBadgesForm();
+  abrirModal('modalEditar');
+  await cargarPreview(f);
+}
+
+function actualizarBadgesForm(){
+  const cont = document.getElementById('formBadges');
+  const tags = [];
+  if(document.getElementById('c_anticipo').value === 'Sí') tags.push('<span class="tag tag-anticipo">Anticipo</span>');
+  if(document.getElementById('c_activoFijo').value === 'Sí') tags.push('<span class="tag tag-inmov">Inmovilizado</span>');
+  cont.innerHTML = tags.join('');
+}
+document.getElementById('c_anticipo').addEventListener('change', actualizarBadgesForm);
+document.getElementById('c_activoFijo').addEventListener('change', actualizarBadgesForm);
+
+// El check de "Factura revisada" se guarda de inmediato (igual que el de la tabla),
+// para que no dependa de pulsar "Guardar" si el usuario solo quiere marcarla como revisada.
+document.getElementById('c_revisado').addEventListener('change', async ()=>{
+  if(editandoIdx === null) return;
+  const objetivo = data.facturas[editandoIdx];
+  const clave = claveFactura(objetivo);
+  const nuevoValor = document.getElementById('c_revisado').checked;
+  const usuario = usuarioActual || 'Desconocido';
+  const ok = await guardarCambios((fresh)=>{
+    const ff = fresh.facturas.find(x=> claveFactura(x) === clave);
+    if(ff){ ff.revisado = nuevoValor; ff.modificadoPor = usuario; ff.modificadoFecha = new Date().toISOString(); }
+  });
+  // Reapuntamos editandoIdx al mismo registro dentro de la nueva versión de `data`.
+  const nuevoIdx = data.facturas.findIndex(x=> claveFactura(x) === clave);
+  if(nuevoIdx >= 0) editandoIdx = nuevoIdx;
+  if(ok) toast('Estado de revisión actualizado.');
+  renderTabla();
+});
+
+async function cargarPreview(f){
+  const pane = document.getElementById('previewPane');
+  pane.innerHTML = '<div class="sin-preview">Cargando vista previa...</div>';
+  if(previewUrlActual){ URL.revokeObjectURL(previewUrlActual); previewUrlActual = null; }
+  try{
+    const fileHandle = await resolverArchivo(f.proveedor, f.relPath || f.archivo);
+    const file = await fileHandle.getFile();
+    previewUrlActual = URL.createObjectURL(file);
+    if(file.type === 'application/pdf' || /\.pdf$/i.test(f.archivo)){
+      pane.innerHTML = `<iframe src="${previewUrlActual}"></iframe>`;
+    } else if(file.type.startsWith('image/')){
+      pane.innerHTML = `<img src="${previewUrlActual}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+    } else {
+      pane.innerHTML = `<div class="sin-preview">No se puede previsualizar este tipo de archivo.<br>${escapeHtml(f.archivo)}</div>`;
+    }
+  }catch(e){
+    pane.innerHTML = `<div class="sin-preview">No se pudo cargar el archivo.<br>${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.getElementById('btnGuardarFactura').addEventListener('click', async ()=>{
+  if(editandoIdx === null) return;
+  const objetivo = data.facturas[editandoIdx];
+  const clave = claveFactura(objetivo);
+  const usuario = usuarioActual || 'Desconocido';
+
+  // Leemos todos los valores del formulario antes de tocar el disco.
+  const retencionValor = valorNumerico('c_retencionValor');
+  const nuevosCampos = {
+    cif: document.getElementById('c_cif').value || null,
+    numero: document.getElementById('c_numero').value || null,
+    fecha: isoADDMMYYYY(document.getElementById('c_fecha').value),
+    base: valorNumerico('c_base'),
+    iva: valorNumerico('c_iva'),
+    ivaPorcentaje: valorNumerico('c_ivaPorcentaje'),
+    total: valorNumerico('c_total'),
+    retencionPorcentaje: valorNumerico('c_retencionPorcentaje'),
+    retencionValor: retencionValor,
+    retencionTiene: !!(retencionValor && retencionValor > 0),
+    'Descuento': valorNumerico('c_descuento'),
+    'Forma de Pago': document.getElementById('c_formaPago').value || null,
+    'Concepto': document.getElementById('c_concepto').value || null,
+    'Centro de Costos': document.getElementById('c_centroCosto').value || null,
+    'Tipo de Gasto': document.getElementById('c_tipoGasto').value || null,
+    activoFijo: document.getElementById('c_activoFijo').value,
+    'Anticipo': document.getElementById('c_anticipo').value
+  };
+  const nuevoRevisado = document.getElementById('c_revisado').checked;
+
+  // Se relee Datos.json justo antes de escribir y solo se aplica el cambio de ESTA
+  // factura sobre esa versión fresca, para no pisar ediciones que hayan hecho otros
+  // usuarios en otras facturas mientras este formulario estaba abierto.
+  const ok = await guardarCambios((fresh)=>{
+    const ff = fresh.facturas.find(x=> claveFactura(x) === clave);
+    if(!ff) return; // el registro ya no existe (¿lo eliminaron/mmovieron?); no hay dónde guardar
+    ff.campos = Object.assign(ff.campos || {}, nuevosCampos);
+    ff.revisado = nuevoRevisado;
+    ff.modificadoPor = usuario;
+    ff.modificadoFecha = new Date().toISOString();
+  });
+
+  const nuevoIdx = data.facturas.findIndex(x=> claveFactura(x) === clave);
+  if(nuevoIdx < 0){
+    toast('No se encontró el registro al guardar (puede haber sido eliminado por otro usuario).', true);
+  } else if(ok){
+    toast('Factura guardada correctamente.');
+  }
+  cerrarModal('modalEditar');
+  poblarFiltrosDinamicos();
+  aplicarFiltros();
+  renderSidebar();
+});
+function valorNumerico(id){
+  const v = document.getElementById(id).value;
+  return v === '' ? null : Number(v);
+}
+
+/* ===================== Arranque ===================== */
+(async function inicio(){
+  const ok = await intentarReconectarAutomatico();
+  if(!ok){
+    // se queda en landing esperando click del usuario
+  }
+})();
+
+})();
+</script>
+</body>
+</html>
