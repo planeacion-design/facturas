@@ -79,6 +79,8 @@
   tbody tr{cursor:pointer;transition:background .1s ease;}
   tbody tr:hover{background:var(--azul-suave);}
   tbody tr.pendiente td:first-child{box-shadow:inset 3px 0 0 var(--rojo);}
+  tbody tr.revisada{background:#e9f9ef;}
+  tbody tr.revisada:hover{background:#dcf3e4;}
   .num{text-align:right;font-variant-numeric:tabular-nums;}
   .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;color:#fff;}
   .tag-anticipo{background:var(--naranja);}
@@ -471,7 +473,7 @@ const USUARIOS = ["Gemma","Sebastian","Judith","Jaqueline","Lorena","Marcela","A
 // para poder verificar de un vistazo que TODOS los usuarios están usando la misma copia
 // (si alguien queda con una versión vieja, sus guardados no tendrán las protecciones
 // más recientes contra pérdida de datos entre varios usuarios).
-const VERSION_APP = "2.1 · 20 jul 2026 (carpeta de PDF opcional, se conecta desde Configuración)";
+const VERSION_APP = "2.2 · 21 jul 2026 (corrige NaN en valores + fila verde para revisadas)";
 (function mostrarVersion(){
   ['versionInfoLanding','versionInfoSidebar'].forEach(id=>{
     const el = document.getElementById(id);
@@ -819,7 +821,7 @@ async function obtenerArchivoJson(){
 // Requiere que las 3 pestañas ya existan con esos nombres exactos dentro del archivo de Sheets.
 async function asegurarEstructuraHoja(){
   const resp = await llamarSheets('GET',
-    `/values:batchGet?ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:A1')}`);
+    `/values:batchGet?valueRenderOption=UNFORMATTED_VALUE&ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:A1')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:A1')}`);
   const [rf, rc, rm] = resp.valueRanges;
   if(!rf.values || !rf.values.length){
     await llamarSheets('PUT', `/values/${encodeURIComponent(PESTANA_FACTURAS+'!A1')}?valueInputOption=RAW`, { values:[ENCABEZADOS_FACTURAS] });
@@ -909,8 +911,12 @@ function facturaAFila(f){
 // Lee TODO (facturas + catálogos + marca de tiempo) directamente de la hoja de Google Sheets.
 async function leerFacturasDeSheets(){
   await asegurarEstructuraHoja();
+  // valueRenderOption=UNFORMATTED_VALUE es imprescindible: sin esto, Sheets devuelve los
+  // números ya formateados según el idioma/formato de la celda (p.ej. "90,91" con coma en vez
+  // de punto decimal), y Number("90,91") en JavaScript da NaN. Con esto se reciben los valores
+  // crudos (90.91 como número real), que es lo que fmtMoneda()/fmtPorcentaje() esperan.
   const resp = await llamarSheets('GET',
-    `/values:batchGet?ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:AZ200000')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:B100000')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:B1')}`);
+    `/values:batchGet?valueRenderOption=UNFORMATTED_VALUE&ranges=${encodeURIComponent(PESTANA_FACTURAS+'!A1:AZ200000')}&ranges=${encodeURIComponent(PESTANA_CATALOGOS+'!A1:B100000')}&ranges=${encodeURIComponent(PESTANA_META+'!A1:B1')}`);
   const [rangoFacturas, rangoCatalogos, rangoMeta] = resp.valueRanges;
 
   const valoresF = rangoFacturas.values || [];
@@ -1705,6 +1711,7 @@ function renderTabla(){
     const idxReal = data.facturas.indexOf(f);
     const tr = document.createElement('tr');
     if(f.estado === 'pendiente') tr.className = 'pendiente';
+    if(f.revisado) tr.className = (tr.className ? tr.className + ' ' : '') + 'revisada';
     const formaPago = valorCampo(c, ['Forma de Pago','formaPago']);
     const concepto = valorCampo(c, ['Concepto','concepto']);
     const centroCosto = valorCampo(c, ['Centro de Costos','centroCosto']);
